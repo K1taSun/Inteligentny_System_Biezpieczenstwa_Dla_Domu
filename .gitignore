@@ -1,0 +1,40 @@
+# macOS
+.DS_Store
+
+# Logs
+*.log
+log/
+
+# IDE / tooling
+.idea/
+*.iml
+.vscode/
+
+# Flutter / Dart
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+.pub-cache/
+
+# Build outputs
+**/build/
+App/phoneapp/.firebase/
+
+# Android
+**/.gradle/
+**/local.properties
+
+# iOS / Xcode
+App/phoneapp/ios/Flutter/flutter_export_environment.sh
+App/phoneapp/ios/Flutter/Generated.xcconfig
+App/phoneapp/ios/Flutter/ephemeral/
+App/phoneapp/ios/.symlinks/
+App/phoneapp/ios/Pods/
+App/phoneapp/ios/Runner.xcworkspace/
+
+# Generated artifacts
+**/GeneratedPluginRegistrant.*
+**/*.g.dart
+
