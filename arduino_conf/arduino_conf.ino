@@ -1,14 +1,5 @@
-/*
-  INTELIGENTNY SYSTEM BEZPIECZEŃSTWA DLA DOMU
-  =============================================
-  Ten program obsługuje system alarmowy z czujnikami ruchu (PIR) i otwarcia (kontaktron),
-  monitoruje temperaturę/wilgotność (DHT11) i komunikuje się z Raspberry Pi.
-*/
-
 #include <SimpleDHT.h>
 
-// --- KONFIGURACJA PINÓW ---
-// Tutaj przypisujemy elementy fizyczne do pinów Arduino
 const int pirPin = 2;       // Czujnik ruchu
 const int reedPin = 3;      // Czujnik otwarcia drzwi/okna
 const int buzzerPin = 4;    // Głośnik/Buzzer
@@ -16,18 +7,17 @@ const int buttonPin = 5;    // Przycisk sterowania
 const int ledPin = 6;       // Dioda LED
 const int dhtPin = 7;       // Czujnik temperatury i wilgotności
 
-// Inicjalizacja czujnika temperatury
+//inicjalizacja czujnika temperatury
 SimpleDHT11 dht(dhtPin);
 
-// --- STANY SYSTEMU ---
-// Główne flagi określające co się dzieje w systemie
-bool systemAktywny = false;   // Czy ochrona jest włączona?
-bool alarmAktywny = false;    // Czy alarm właśnie wyje?
-unsigned long czasStartu = 0; // Kiedy włączono system
-const unsigned long opoznienieStartu = 10000; // Czas na opuszczenie domu (10s)
 
-// --- KONFIGURACJA SYGNALIZACJI ---
-// Zmienne do obsługi migania diodą LED
+// główne flagi określające co się dzieje w systemie
+bool systemAktywny = false;   
+bool alarmAktywny = false;    
+unsigned long czasStartu = 0; 
+const unsigned long opoznienieStartu = 10000; 
+
+// zmienne do obsługi migania diodą LED
 unsigned long ostatniMig = 0;
 bool stanMigania = false;
 bool miganiePoUzbrojeniu = false;
@@ -36,14 +26,12 @@ int licznikMigniec = 0;
 unsigned long ostatniaZmianaMigniecia = 0;
 const unsigned long czasMigniecia = 150;
 
-// --- OBSŁUGA PRZYCISKU ---
-// Zmienne do eliminacji drgań styków (debounce)
+// zmienne do eliminacji drgań styków (debounce)
 bool ostatniStanPrzycisku = HIGH;
 unsigned long czasOstatniegoNacisniecia = 0;
 const unsigned long debouncePrzycisku = 50;
 
-// --- OBSŁUGA CZUJNIKÓW ---
-// Pamięć stanów czujników, żeby reagować tylko na zmiany
+// pamięć stanów czujników, żeby reagować tylko na zmiany
 bool poprzedniStanOkna;
 bool ostatniZarejestrowanyStanOkna;
 unsigned long czasOstatniejZmianyOkna = 0;
@@ -52,8 +40,8 @@ bool poprzedniStanPIR = false;
 unsigned long czasOstatniejZmianyPIR = 0;
 const unsigned long debouncePIR = 100;
 
-// --- OBSŁUGA DŹWIĘKU ---
-// Zmienne do odtwarzania dźwięków bez zatrzymywania programu
+
+// zmienne do odtwarzania dźwięków bez zatrzymywania programu
 bool buzzerAktywny = false;
 unsigned long czasBuzzerStart = 0;
 unsigned long czasBuzzerStop = 0;
@@ -64,41 +52,38 @@ const unsigned long czasBeepOFF = 150;
 const unsigned long czasMelodiaON = 200;
 const unsigned long czasMelodiaOFF = 100;
 
-// --- OBSŁUGA DHT11 I KOMUNIKACJI ---
-// Zmienne do pomiarów i wysyłania danych
+// zmienne do pomiarów i wysyłania danych
 float temperatura = 0.0;
 float wilgotnosc = 0.0;
 unsigned long ostatniOdczytDHT = 0;
-const unsigned long interwalOdczytuDHT = 2000; // DHT potrzebuje min. 2s przerwy
+const unsigned long interwalOdczytuDHT = 2000; 
 unsigned long ostatnieWyslanieDanych = 0;
-const unsigned long interwalWysylania = 30000; // Wysyłamy dane co 30s
+const unsigned long interwalWysylania = 30000
 bool dhtGotowy = false;
 
-// --- OBSŁUGA KOMEND ZDALNYCH ---
-// Bufor na polecenia z Raspberry Pi
+// obsługa komend zdalnych
 String odebranaKomenda = "";
 bool nowaKomenda = false;
 const int maxDlugoscKomendy = 100;
 
-// ================================================================
-// KONFIGURACJA WSTĘPNA (uruchamiana raz)
-// ================================================================
+//_________________konfiguracja wstępna____________________
 void setup() {
-  // Ustawienie trybów pracy pinów
+
+  // ustawienie trybów pracy pinów
   pinMode(pirPin, INPUT);
   pinMode(reedPin, INPUT_PULLUP);
   pinMode(buttonPin, INPUT_PULLUP);
   pinMode(ledPin, OUTPUT);
   pinMode(buzzerPin, OUTPUT);
 
-  // Stan początkowy wyjść
-  digitalWrite(buzzerPin, HIGH); // Wyłączony (stan wysoki)
-  analogWrite(ledPin, 0);        // Wyłączona
+  // stan początkowy wyjść
+  digitalWrite(buzzerPin, HIGH); /
+  analogWrite(ledPin, 0);        
   
-  // Start komunikacji z komputerem/RPi
+  //komunikacja
   Serial.begin(9600);
 
-  // Inicjalizacja liczników czasu i stanów
+  // inicjalizacja liczników czasu i stanów
   ostatniOdczytDHT = millis();
   ostatnieWyslanieDanych = millis();
   poprzedniStanOkna = digitalRead(reedPin);
@@ -106,9 +91,7 @@ void setup() {
   poprzedniStanPIR = (digitalRead(pirPin) == HIGH);
 }
 
-// ================================================================
-// GŁÓWNA PĘTLA PROGRAMU (działa w kółko)
-// ================================================================
+//Główna pętla logiki systemu
 void loop() {
   unsigned long teraz = millis(); // Aktualny czas systemu
   
@@ -164,11 +147,11 @@ void loop() {
         if (!stanMigania) {
           licznikMigniec++;
           if (licznikMigniec >= 2) {
-            // Koniec sekwencji uzbrajania
+            
             miganiePoUzbrojeniu = false;
             analogWrite(ledPin, 0);
             Serial.println("System uzbrojony");
-            // Zresetuj stany czujników, żeby nie wywołać alarmu od razu
+         
             poprzedniStanOkna = digitalRead(reedPin);
             ostatniZarejestrowanyStanOkna = poprzedniStanOkna;
             poprzedniStanPIR = (digitalRead(pirPin) == HIGH);
@@ -176,20 +159,23 @@ void loop() {
         }
       }
     } else {
+
       // Jeśli jeszcze trwa odliczanie, świeć zależnie od czasu
       unsigned long czasOdStartu = teraz - czasStartu;
       int jasnosc = map(czasOdStartu, 0, opoznienieStartu, 0, 255);
       analogWrite(ledPin, jasnosc);
+
     }
   }
 
-  // 8. MONITOROWANIE BEZPIECZEŃSTWA (tylko gdy system czuwa)
+  // 8. MONITOROWANIE BEZPIECZEŃSTWA
   if (systemAktywny && (teraz - czasStartu > opoznienieStartu) && !miganiePoUzbrojeniu) {
-    // Sprawdź czujniki
+
+    // sprawdzanie czujników
     bool aktualnieOknoOtwarte = odczytajOkno(teraz);
     bool wykrytoRuch = odczytajPIR(teraz);
 
-    // Raportuj zmiany stanu okna
+    //stany okna
     if (aktualnieOknoOtwarte != ostatniZarejestrowanyStanOkna) {
       if (aktualnieOknoOtwarte == HIGH) {
         Serial.println("ALARM OKNA: Okno zostało otwarte!");
@@ -199,7 +185,7 @@ void loop() {
       ostatniZarejestrowanyStanOkna = aktualnieOknoOtwarte;
     }
 
-    // Czy włączyć alarm?
+    
     bool nowyStanAlarmu = wykrytoRuch || aktualnieOknoOtwarte;
 
     if (nowyStanAlarmu) {
@@ -208,19 +194,19 @@ void loop() {
         alarmAktywny = true;
       }
 
-      // Mrugaj agresywnie diodą
+      
       if (teraz - ostatniMig >= 100) {
         stanMigania = !stanMigania;
         analogWrite(ledPin, stanMigania ? 255 : 0);
         ostatniMig = teraz;
       }
       
-      // Włącz syrenę
+     
       if (trybBuzzer != 2) {
         uruchomMelodie();
       }
     } else {
-      // Jeśli zagrożenie minęło, wyłącz alarm
+      
       if (alarmAktywny) {
         Serial.println("SYSTEM: Alarm WYŁĄCZONY.");
         analogWrite(ledPin, 0);
@@ -231,9 +217,7 @@ void loop() {
   }
 }
 
-// ================================================================
-// FUNKCJE POMOCNICZE
-// ================================================================
+//__________________Funkcje do obsługi systemu____________________
 
 // Odczytuje stan okna, ignorując krótkie zakłócenia
 bool odczytajOkno(unsigned long teraz) {
@@ -263,6 +247,7 @@ bool odczytajPIR(unsigned long teraz) {
   return poprzedniStanPIR;
 }
 
+//obsługa dźwięku
 void aktualizujBuzzer(unsigned long teraz) {
   if (trybBuzzer == 0) return;
 
@@ -303,6 +288,7 @@ void aktualizujBuzzer(unsigned long teraz) {
   }
 }
 
+//obsługa dźwięku
 void uruchomBeep(int ilosc) {
   if (ilosc > 0) {
     trybBuzzer = 1;
@@ -313,6 +299,7 @@ void uruchomBeep(int ilosc) {
   }
 }
 
+//obsługa melodii
 void uruchomMelodie() {
   trybBuzzer = 2;
   buzzerAktywny = true;
@@ -320,6 +307,7 @@ void uruchomMelodie() {
   digitalWrite(buzzerPin, LOW);
 }
 
+//wyłączanie dźwięku
 void wylaczBuzzer() {
   trybBuzzer = 0;
   buzzerAktywny = false;
@@ -327,6 +315,7 @@ void wylaczBuzzer() {
   digitalWrite(buzzerPin, HIGH);
 }
 
+//aktualizacja dht
 void aktualizujDHT(unsigned long teraz) {
   if (teraz - ostatniOdczytDHT >= interwalOdczytuDHT) {
     ostatniOdczytDHT = teraz;
@@ -344,6 +333,7 @@ void aktualizujDHT(unsigned long teraz) {
   }
 }
 
+//wysyłanie danych dht
 void wyslijDaneDHT() {
   if (dhtGotowy) {
     Serial.print("{\"temp\":");
@@ -356,6 +346,7 @@ void wyslijDaneDHT() {
   }
 }
 
+//odczytywanie komend zdalnych
 void odczytajKomende() {
   while (Serial.available() > 0 && odebranaKomenda.length() < maxDlugoscKomendy) {
     char znak = Serial.read();
@@ -376,6 +367,7 @@ void odczytajKomende() {
   }
 }
 
+//obsługa komend zdalnych
 void obsluzKomende(unsigned long teraz) {
   odebranaKomenda.trim();
   
@@ -410,6 +402,7 @@ void obsluzKomende(unsigned long teraz) {
   }
 }
 
+//aktywacja systemu
 void aktywujSystem(unsigned long teraz, bool aktywuj) {
   systemAktywny = aktywuj;
   
@@ -434,6 +427,7 @@ void aktywujSystem(unsigned long teraz, bool aktywuj) {
   }
 }
 
+//wysyłanie statusu systemu JSON
 void wyslijStatus() {
   Serial.print("{\"system_active\":");
   Serial.print(systemAktywny ? "true" : "false");
