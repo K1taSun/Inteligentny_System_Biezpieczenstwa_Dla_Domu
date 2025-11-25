@@ -25,4 +25,3 @@ Czy wiesz, że ten system potrafi "uzbroić się" z opóźnieniem, dając Ci cza
 
 ---
 *Projekt stworzony w celach edukacyjnych.*
-
