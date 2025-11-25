@@ -1,0 +1,10 @@
+# Sekrety i dane wrażliwe
+Skrypty/secure_config.py
+Skrypty/myproject-*.json
+
+# Środowiska lokalne / artefakty
+Skrypty/gdrive_env/
+Skrypty/uploaded_files.txt
+Nagrania/
+
+
