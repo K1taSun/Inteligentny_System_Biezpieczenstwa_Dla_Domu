@@ -12,12 +12,35 @@ Prosty, ale potężny system alarmowy typu DIY (Do-It-Yourself), który łączy 
     *   ☁️ Uploaduje nagranie na Google Drive.
 4.  **Podgląd**: Aplikacja mobilna (Flutter) pozwala na zdalny dostęp do nagrań z chmury.
 
-## 🛠️ Technologie
+## 🛠️ Technologie i Systemy
 
-*   **Hardware**: Arduino (logika czujników), Raspberry Pi (kamera, komunikacja).
-*   **Backend**: Python (obsługa Serial, Google Drive API, SMTP).
-*   **Mobile**: Flutter (Android/iOS) z integracją Google Sign-In.
-*   **Sensors**: PIR, Kontaktron, DHT11.
+### 📱 Aplikacja Mobilna (Flutter)
+*   **Framework**: Flutter & Dart
+*   **Platformy**: Android / iOS
+*   **Kluczowe Biblioteki**:
+    *   `google_sign_in` & `googleapis` - Bezpieczna autoryzacja i dostęp do Google Drive.
+    *   `video_player` - Odtwarzanie nagrań alarmowych prosto z chmury.
+    *   `shared_preferences` - Przechowywanie lokalnych ustawień użytkownika.
+
+### 🖥️ Jednostka Centralna (Raspberry Pi / Python)
+*   **Język**: Python 3
+*   **Kluczowe Moduły**:
+    *   `google-api-python-client` - Obsługa Google Drive API v3 (upload nagrań).
+    *   `pyserial` - Dwukierunkowa komunikacja UART z Arduino.
+    *   `smtplib` - Wysyłanie powiadomień e-mail z alertami (SMTP SSL).
+*   **Narzędzia Systemowe**:
+    *   `libcamera-vid` - Niskopoziomowa obsługa kamery Raspberry Pi.
+    *   `MP4Box` (GPAC) - Konwersja surowego strumienia wideo do formatu MP4.
+
+### ⚡ Mikrokontroler (Arduino)
+*   **Język**: C++ (Arduino IDE)
+*   **Sprzęt**: Arduino Uno/Nano (lub kompatybilne).
+*   **Biblioteki**: `SimpleDHT` (obsługa czujnika temperatury i wilgotności).
+*   **Peryferia i Czujniki**:
+    *   **PIR (HC-SR501)** - Wykrywanie ruchu.
+    *   **Kontaktron** - Magnetyczny czujnik otwarcia drzwi/okien.
+    *   **DHT11** - Monitoring warunków środowiskowych.
+    *   **Buzzer & LED** - Sygnalizacja stanu uzbrojenia i alarmu.
 
 ## 💡 Ciekawostka
 
