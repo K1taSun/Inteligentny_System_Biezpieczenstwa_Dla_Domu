@@ -38,7 +38,6 @@ Prosty, ale potężny system alarmowy typu DIY (Do-It-Yourself), który łączy 
 *   **Biblioteki**: `SimpleDHT` (obsługa czujnika temperatury i wilgotności).
 *   **Peryferia i Czujniki**:
     *   **PIR (HC-SR501)** - Wykrywanie ruchu.
-    *   **Kontaktron** - Magnetyczny czujnik otwarcia drzwi/okien.
     *   **DHT11** - Monitoring warunków środowiskowych.
     *   **Buzzer & LED** - Sygnalizacja stanu uzbrojenia i alarmu.
 
