@@ -119,8 +119,8 @@
 │                        │   └────────────────────┘    │                      │
 │                        │                             │                      │
 │                        │   ┌────────────────────┐    │                      │
-│                        │   │   📷 libcamera-vid │    │                      │
-│                        │   │   🎬 MP4Box        │    │                      │
+│                        │   │      libcamera-vid │    │                      │
+│                        │   │      MP4Box        │    │                      │
 │                        │   └────────────────────┘    │                      │
 │                        └──────────────┬──────────────┘                      │
 │                                       │                                     │
@@ -132,7 +132,7 @@
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │   ┌─────────────────┐        ┌─────────────────┐        ┌───────────────┐   │
-│   │  📧 Gmail SMTP  │        │ ☁️ Google Drive  │        │ 🔐 OAuth 2.0  │   │
+│   │   Gmail SMTP    │        │   Google Drive  │        │  OAuth 2.0    │   │
 │   │                 │        │                 │        │               │   │
 │   │  Powiadomienia  │        │  Nagrania MP4   │        │  Autoryzacja  │   │
 │   │  alarmowe       │        │  z kamer        │        │  użytkownika  │   │
@@ -146,7 +146,7 @@
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │      ┌─────────────────────────────────────────────────────────────┐        │
-│      │                  📱 FLUTTER APP (iOS/Android)               │        │
+│      │                     FLUTTER APP (iOS/Android)               │        │
 │      │                                                             │        │
 │      │   ┌───────────┐   ┌───────────┐   ┌───────────────────┐     │        │
 │      │   │  Status   │   │  Nagrania │   │  Odtwarzacz       │     │        │
@@ -235,8 +235,9 @@
 | Komponent | Model | Ilość | Uwagi |
 |-----------|-------|:-----:|-------|
 | Mikrokontroler | Arduino Uno/Nano | 1 | ATmega328P |
-| Komputer jednopłytkowy | Raspberry Pi 3B+/4/5 | 1 | z kamerą |
-| Czujnik ruchu | PIR HC-SR501 | 1+ | zasięg 3-7m |
+| Komputer jednopłytkowy | Raspberry Pi 2W/3/4/5 | 1 | |
+| Moduł kamery | Raspberry Pi Camera v2/v3 | 1 | lub kompatybilna CSI |
+| Czujnik ruchu | PIR HC-SR501 | 1 | zasięg 3-7m |
 | Czujnik temp./wilg. | DHT11 | 1 | opcjonalnie DHT22 |
 | Moduł dźwiękowy | Buzzer pasywny | 1 | 5V |
 | Dioda LED | 5mm | 1 | + rezystor 220Ω |
@@ -320,23 +321,23 @@ flutter build ios --release
 Utwórz plik `raspberryPiConfig/Skrypty/secure_config.py`:
 
 ```python
-# ═══════════════════════════════════════════════════════════
-#                    KONFIGURACJA SYSTEMU
-# ═══════════════════════════════════════════════════════════
+ ═══════════════════════════════════════════════════════════
+                   KONFIGURACJA SYSTEMU
+ ═══════════════════════════════════════════════════════════
 
 # ─────────────────────────────────────────────────────────────
-# POŁĄCZENIE Z ARDUINO
+  POŁĄCZENIE Z ARDUINO
 # ─────────────────────────────────────────────────────────────
 SERIAL_PORT = '/dev/ttyACM0'           # lub /dev/ttyUSB0
 
 # ─────────────────────────────────────────────────────────────
-# NAGRYWANIE WIDEO
+ NAGRYWANIE WIDEO
 # ─────────────────────────────────────────────────────────────
 RECORDING_DURATION_SECONDS = 60
 RECORDINGS_FOLDER = '/home/pi/nagrania'
 
 # ─────────────────────────────────────────────────────────────
-# POWIADOMIENIA E-MAIL (Gmail SMTP)
+  POWIADOMIENIA E-MAIL (Gmail SMTP)
 # ─────────────────────────────────────────────────────────────
 SMTP_USER = "twoj_email@gmail.com"
 SMTP_SEND_TO = "odbiorca@example.com"
@@ -345,7 +346,7 @@ ALERT_SUBJECT = "⚠️ ALARM BEZPIECZEŃSTWA"
 ALERT_MESSAGE = "Wykryto naruszenie strefy. Sprawdź nagranie."
 
 # ─────────────────────────────────────────────────────────────
-# GOOGLE DRIVE API
+  GOOGLE DRIVE API
 # ─────────────────────────────────────────────────────────────
 GDRIVE_CLIENT_SECRET_FILE = '/home/pi/credentials/service_account.json'
 GDRIVE_FOLDER_ID = 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
