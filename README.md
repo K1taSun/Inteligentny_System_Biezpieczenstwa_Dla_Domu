@@ -300,7 +300,7 @@ nano secure_config.py
 
 ```bash
 # Wymagania: Flutter SDK >= 3.9.0
-cd app_IOS:Android/phoneapp
+cd app_IOS_Android/phoneapp
 
 # Instalacja zależności
 flutter pub get
@@ -506,7 +506,7 @@ python3 -c "from Projekt import gDrive; gDrive()"
 ```
 Inteligentny_System_Biezpieczenstwa_Dla_Domu/
 │
-├── 📱 app_IOS:Android/
+├── 📱 app_IOS_Android/
 │   └── phoneapp/
 │       ├── lib/
 │       │   ├── main.dart
