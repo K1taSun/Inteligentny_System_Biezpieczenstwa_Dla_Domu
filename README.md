@@ -265,14 +265,14 @@ Arduino Uno          Peryferia
 ### 1️⃣ Arduino
 
 ```bash
-# 1. Zainstaluj Arduino IDE
-# 2. Dodaj bibliotekę SimpleDHT:
-#    Sketch → Include Library → Manage Libraries → SimpleDHT
+1. Zainstaluj Arduino IDE
+2. Dodaj bibliotekę SimpleDHT:
+   Sketch → Include Library → Manage Libraries → SimpleDHT
 
-# 3. Wgraj sketch:
-#    Otwórz: arduinoConfig/arduino_conf.ino
-#    Wybierz płytkę i port
-#    Upload
+ 3. Wgraj sketch:
+   Otwórz: arduinoConfig/arduino_conf.ino
+    Wybierz płytkę i port
+     Upload
 ```
 
 ### 2️⃣ Raspberry Pi
@@ -455,9 +455,9 @@ __pycache__/
 ## 📊 Diagram sekwencji — Alarm
 
 ```
-┌─────────┐      ┌─────────┐      ┌──────────┐      ┌─────────┐      ┌───────────┐
-│  PIR    │      │ Arduino │      │ Rasp. Pi │      │  Gmail  │      │ G. Drive  │
-└────┬────┘      └────┬────┘      └────┬─────┘      └────┬────┘      └─────┬─────┘
+┌─────────┐      ┌─────────┐      ┌──────────┐      ┌─────────┐       ┌───────────┐
+│  PIR    │      │ Arduino │      │ Rasp. Pi │      │  Gmail  │       │ G. Drive  │
+└────┬────┘      └────┬────┘      └────┬─────┘      └────┬────┘       └─────┬─────┘
      │                │                │                 │                  │
      │  Ruch wykryty  │                │                 │                  │
      │───────────────►│                │                 │                  │
@@ -468,15 +468,15 @@ __pycache__/
      │                │                │                 │                  │
      │                │                │  E-mail SMTP    │                  │
      │                │                │────────────────►│                  │
-     │                │                │                 │                  │
+     │                │                │                 │                  │ 
      │                │                │  libcamera-vid  │                  │
      │                │                │◄───────────────►│                  │
      │                │                │  (nagrywanie)   │                  │
      │                │                │                 │                  │
-     │                │                │  MP4Box convert │                  │
-     │                │                │◄───────────────►│                  │
-     │                │                │                 │                  │
-     │                │                │           Upload video             │
+     │                │                │  MP4Box convert │                  │ 
+     │                │                │◄───────────────►│                  │ 
+     │                │                │                 │                  │ 
+     │                │                │           Upload vdeo              │
      │                │                │────────────────────────────────────►
      │                │                │                 │                  │
      │                │                │                 │     ✓ Gotowe     │
@@ -560,9 +560,8 @@ Zobacz plik [LICENSE](LICENSE) po szczegóły.
 
 ---
 
-## 👨‍💻 Autor
+## 👨‍💻 Autor Nikita Parkovskyi
 
-Nikita Parkovskyi 
 Projekt stworzony w celach edukacyjnych.
 
 <div align="center">
