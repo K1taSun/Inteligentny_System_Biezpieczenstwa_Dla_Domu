@@ -1,7 +1,6 @@
 #include <SimpleDHT.h>
 
 const int pirPin = 2;       // Czujnik ruchu
-const int reedPin = 3;      // Czujnik otwarcia drzwi/okna
 const int buzzerPin = 4;    // Głośnik/Buzzer
 const int buttonPin = 5;    // Przycisk sterowania
 const int ledPin = 6;       // Dioda LED
@@ -32,10 +31,6 @@ unsigned long czasOstatniegoNacisniecia = 0;
 const unsigned long debouncePrzycisku = 50;
 
 // pamięć stanów czujników, żeby reagować tylko na zmiany
-bool poprzedniStanOkna;
-bool ostatniZarejestrowanyStanOkna;
-unsigned long czasOstatniejZmianyOkna = 0;
-const unsigned long debounceOkna = 50;
 bool poprzedniStanPIR = false;
 unsigned long czasOstatniejZmianyPIR = 0;
 const unsigned long debouncePIR = 100;
@@ -58,7 +53,7 @@ float wilgotnosc = 0.0;
 unsigned long ostatniOdczytDHT = 0;
 const unsigned long interwalOdczytuDHT = 2000; 
 unsigned long ostatnieWyslanieDanych = 0;
-const unsigned long interwalWysylania = 30000
+const unsigned long interwalWysylania = 30000;
 bool dhtGotowy = false;
 
 // obsługa komend zdalnych
@@ -71,13 +66,12 @@ void setup() {
 
   // ustawienie trybów pracy pinów
   pinMode(pirPin, INPUT);
-  pinMode(reedPin, INPUT_PULLUP);
   pinMode(buttonPin, INPUT_PULLUP);
   pinMode(ledPin, OUTPUT);
   pinMode(buzzerPin, OUTPUT);
 
   // stan początkowy wyjść
-  digitalWrite(buzzerPin, HIGH); /
+  digitalWrite(buzzerPin, HIGH);
   analogWrite(ledPin, 0);        
   
   //komunikacja
@@ -86,8 +80,6 @@ void setup() {
   // inicjalizacja liczników czasu i stanów
   ostatniOdczytDHT = millis();
   ostatnieWyslanieDanych = millis();
-  poprzedniStanOkna = digitalRead(reedPin);
-  ostatniZarejestrowanyStanOkna = poprzedniStanOkna;
   poprzedniStanPIR = (digitalRead(pirPin) == HIGH);
 }
 
@@ -152,8 +144,6 @@ void loop() {
             analogWrite(ledPin, 0);
             Serial.println("System uzbrojony");
          
-            poprzedniStanOkna = digitalRead(reedPin);
-            ostatniZarejestrowanyStanOkna = poprzedniStanOkna;
             poprzedniStanPIR = (digitalRead(pirPin) == HIGH);
           }
         }
@@ -171,24 +161,10 @@ void loop() {
   // 8. MONITOROWANIE BEZPIECZEŃSTWA
   if (systemAktywny && (teraz - czasStartu > opoznienieStartu) && !miganiePoUzbrojeniu) {
 
-    // sprawdzanie czujników
-    bool aktualnieOknoOtwarte = odczytajOkno(teraz);
+    // sprawdzanie czujnika ruchu
     bool wykrytoRuch = odczytajPIR(teraz);
 
-    //stany okna
-    if (aktualnieOknoOtwarte != ostatniZarejestrowanyStanOkna) {
-      if (aktualnieOknoOtwarte == HIGH) {
-        Serial.println("ALARM OKNA: Okno zostało otwarte!");
-      } else {
-        Serial.println("INFO OKNA: Okno zostało zamknięte.");
-      }
-      ostatniZarejestrowanyStanOkna = aktualnieOknoOtwarte;
-    }
-
-    
-    bool nowyStanAlarmu = wykrytoRuch || aktualnieOknoOtwarte;
-
-    if (nowyStanAlarmu) {
+    if (wykrytoRuch) {
       if (!alarmAktywny) {
         Serial.println("SYSTEM: Alarm AKTYWNY!");
         alarmAktywny = true;
@@ -218,20 +194,6 @@ void loop() {
 }
 
 //__________________Funkcje do obsługi systemu____________________
-
-// Odczytuje stan okna, ignorując krótkie zakłócenia
-bool odczytajOkno(unsigned long teraz) {
-  bool aktualnyStan = digitalRead(reedPin);
-  
-  if (aktualnyStan != poprzedniStanOkna) {
-    if (teraz - czasOstatniejZmianyOkna > debounceOkna) {
-      czasOstatniejZmianyOkna = teraz;
-      poprzedniStanOkna = aktualnyStan;
-      return aktualnyStan;
-    }
-  }
-  return poprzedniStanOkna;
-}
 
 // Odczytuje czujnik ruchu, ignorując zakłócenia
 bool odczytajPIR(unsigned long teraz) {
@@ -414,8 +376,6 @@ void aktywujSystem(unsigned long teraz, bool aktywuj) {
     miganiePoUzbrojeniu = true;
     czasMigania = teraz;
     licznikMigniec = 0;
-    poprzedniStanOkna = digitalRead(reedPin);
-    ostatniZarejestrowanyStanOkna = poprzedniStanOkna;
     poprzedniStanPIR = (digitalRead(pirPin) == HIGH);
   } else {
     alarmAktywny = false;
