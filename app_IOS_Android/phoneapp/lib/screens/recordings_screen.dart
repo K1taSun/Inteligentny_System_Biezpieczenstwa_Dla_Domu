@@ -218,7 +218,8 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
 
   Widget _buildLoginCard() {
     final theme = Theme.of(context);
-    return Center(
+    return Align(
+      alignment: const Alignment(0, -0.5),
       child: Container(
         padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(

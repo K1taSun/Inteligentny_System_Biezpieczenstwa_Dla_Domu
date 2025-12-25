@@ -33,44 +33,69 @@ class _MainScreenState extends State<MainScreen> {
         title: Text(_titles[_selectedIndex]),
       ),
       body: SafeArea(
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          transitionBuilder: (child, animation) => FadeTransition(
-            opacity: animation,
-            child: child,
-          ),
-          child: Padding(
-            key: ValueKey(_selectedIndex),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: _screens[_selectedIndex],
+        bottom: false,
+        child: ShaderMask(
+          shaderCallback: (Rect bounds) {
+            return const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.white,
+                Colors.white,
+                Colors.transparent,
+              ],
+              stops: [0.0, 0.85, 1.0],
+            ).createShader(bounds);
+          },
+          blendMode: BlendMode.dstIn,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: child,
+            ),
+            child: Padding(
+              key: ValueKey(_selectedIndex),
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 0),
+              child: _screens[_selectedIndex],
+            ),
           ),
         ),
       ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(28),
-          child: NavigationBar(
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: (index) => setState(() => _selectedIndex = index),
-            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home_rounded),
-                label: 'Status',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.videocam_outlined),
-                selectedIcon: Icon(Icons.videocam_rounded),
-                label: 'Video',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.folder_outlined),
-                selectedIcon: Icon(Icons.folder_rounded),
-                label: 'Nagrania',
-              ),
-            ],
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: NavigationBar(
+              
+              backgroundColor: Theme.of(context).colorScheme.surface,
+              surfaceTintColor: Colors.transparent,
+              shadowColor: Colors.black26,
+              elevation: 3,
+
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+              height: 70,
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home_rounded),
+                  label: 'Status',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.videocam_outlined),
+                  selectedIcon: Icon(Icons.videocam_rounded),
+                  label: 'Video',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.folder_outlined),
+                  selectedIcon: Icon(Icons.folder_rounded),
+                  label: 'Nagrania',
+                ),
+              ],
+            ),
           ),
         ),
       ),

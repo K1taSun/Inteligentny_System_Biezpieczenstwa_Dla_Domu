@@ -84,6 +84,8 @@ class _StatusScreenState extends State<StatusScreen> {
           ),
           const SizedBox(height: 12),
           ..._events.map((event) => _EventTile(event: event)),
+
+          const SizedBox(height: 110),
         ],
       ),
     );
