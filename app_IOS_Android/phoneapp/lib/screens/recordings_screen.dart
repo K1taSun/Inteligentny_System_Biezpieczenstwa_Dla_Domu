@@ -1,5 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:googleapis/drive/v3.dart' as drive;
+import 'package:http/http.dart' as http;
 import 'package:phoneapp/theme/app_theme.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+/// Klient HTTP z nagłówkami autoryzacji Google
+class GoogleAuthClient extends http.BaseClient {
+  GoogleAuthClient(this._headers);
+  final Map<String, String> _headers;
+  final http.Client _client = http.Client();
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    request.headers.addAll(_headers);
+    return _client.send(request);
+  }
+}
 
 /// Model nagrania dla trybu demo i rzeczywistego użycia
 class Recording {
@@ -8,6 +26,8 @@ class Recording {
   final String? thumbnailUrl;
   final DateTime createdTime;
   final String cameraName;
+  final String? webViewLink;
+  final String? webContentLink;
 
   Recording({
     required this.id,
@@ -15,7 +35,22 @@ class Recording {
     this.thumbnailUrl,
     required this.createdTime,
     required this.cameraName,
+    this.webViewLink,
+    this.webContentLink,
   });
+
+  /// Tworzy Recording z pliku Google Drive
+  factory Recording.fromDriveFile(drive.File file) {
+    return Recording(
+      id: file.id ?? '',
+      name: file.name ?? 'Nagranie',
+      thumbnailUrl: file.thumbnailLink,
+      createdTime: file.createdTime ?? DateTime.now(),
+      cameraName: 'Kamera Raspberry Pi',
+      webViewLink: file.webViewLink,
+      webContentLink: file.webContentLink,
+    );
+  }
 }
 
 class RecordingsScreen extends StatefulWidget {
@@ -26,15 +61,81 @@ class RecordingsScreen extends StatefulWidget {
 }
 
 class _RecordingsScreenState extends State<RecordingsScreen> {
+  // Google Sign-In z uprawnieniami do odczytu i usuwania plików
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: [
+      drive.DriveApi.driveReadonlyScope,
+      drive.DriveApi.driveFileScope,
+    ],
+  );
+
   final TextEditingController _searchController = TextEditingController();
 
+  GoogleSignInAccount? _currentUser;
+  drive.DriveApi? _driveApi;
+  
   bool _isConnected = false;
   List<Recording> _recordings = [];
   bool _isLoading = false;
+  bool _isSigningIn = false;
   String? _errorMessage;
   String _searchQuery = '';
   DateTimeRange? _dateRange;
   String _connectedDriveName = '';
+  bool _isDemoMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _googleSignIn.onCurrentUserChanged.listen(_onUserChanged);
+    _trySilentSignIn();
+  }
+
+  void _onUserChanged(GoogleSignInAccount? account) {
+    if (mounted) {
+      setState(() {
+        _currentUser = account;
+        _isSigningIn = false;
+      });
+      if (account != null) {
+        _initDriveApi();
+      }
+    }
+  }
+
+  Future<void> _trySilentSignIn() async {
+    try {
+      await _googleSignIn.signInSilently();
+    } catch (e) {
+      debugPrint('Silent sign-in skipped: $e');
+    }
+  }
+
+  Future<void> _initDriveApi() async {
+    if (_currentUser == null) return;
+    
+    try {
+      final headers = await _currentUser!.authHeaders;
+      _driveApi = drive.DriveApi(GoogleAuthClient(headers));
+      
+      if (mounted) {
+        setState(() {
+          _isConnected = true;
+          _connectedDriveName = _currentUser?.email ?? 'Google Drive';
+          _isDemoMode = false;
+        });
+      }
+      
+      await _loadRecordingsFromDrive();
+    } catch (e) {
+      debugPrint('Error initializing Drive API: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Nie udało się połączyć z Google Drive.';
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -43,28 +144,108 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
   }
 
   Future<void> _handleConnect() async {
+    if (_isSigningIn) return;
+
     setState(() {
+      _isSigningIn = true;
       _isLoading = true;
       _errorMessage = null;
     });
 
-    // Symulacja połączenia z dyskiem (w przyszłości można dodać prawdziwe API)
-    await Future.delayed(const Duration(milliseconds: 1500));
+    try {
+      final account = await _googleSignIn.signIn();
+      
+      if (account == null) {
+        // Użytkownik anulował logowanie
+        if (mounted) {
+          setState(() {
+            _isSigningIn = false;
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+      // Sukces - _onUserChanged zostanie wywołane automatycznie
+    } on PlatformException catch (e) {
+      debugPrint('Platform sign-in error: ${e.code} - ${e.message}');
+      if (mounted) {
+        setState(() {
+          _isSigningIn = false;
+          _isLoading = false;
+          _errorMessage = _getSignInErrorMessage(e.code);
+        });
+        
+        // Pokaż opcję trybu demo
+        _showDemoModeOption();
+      }
+    } catch (e) {
+      debugPrint('Sign-in error: $e');
+      if (mounted) {
+        setState(() {
+          _isSigningIn = false;
+          _isLoading = false;
+          _errorMessage = 'Błąd logowania. Sprawdź połączenie z internetem.';
+        });
+        
+        _showDemoModeOption();
+      }
+    }
+  }
 
-    if (mounted) {
-      setState(() {
-        _isConnected = true;
-        _isLoading = false;
-        _connectedDriveName = 'Dysk Raspberry Pi';
-        _recordings = _generateDemoRecordings();
-      });
+  void _showDemoModeOption() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Nie można połączyć z Google. Uruchomić tryb demo?'),
+        action: SnackBarAction(
+          label: 'Demo',
+          onPressed: _enableDemoMode,
+        ),
+        duration: const Duration(seconds: 5),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+  }
+
+  void _enableDemoMode() {
+    setState(() {
+      _isConnected = true;
+      _isDemoMode = true;
+      _connectedDriveName = 'Tryb Demo';
+      _recordings = _generateDemoRecordings();
+      _errorMessage = null;
+    });
+  }
+
+  String _getSignInErrorMessage(String errorCode) {
+    switch (errorCode) {
+      case 'sign_in_canceled':
+        return 'Logowanie zostało anulowane.';
+      case 'sign_in_failed':
+        return 'Nie udało się zalogować. Sprawdź konfigurację Google.';
+      case 'network_error':
+        return 'Brak połączenia z internetem.';
+      default:
+        return 'Wystąpił błąd podczas logowania (kod: $errorCode).';
     }
   }
 
   Future<void> _handleDisconnect() async {
+    try {
+      if (!_isDemoMode) {
+        await _googleSignIn.disconnect();
+      }
+    } catch (e) {
+      debugPrint('Sign-out error: $e');
+    }
+    
     if (mounted) {
       setState(() {
+        _currentUser = null;
+        _driveApi = null;
         _isConnected = false;
+        _isDemoMode = false;
         _recordings = [];
         _dateRange = null;
         _searchQuery = '';
@@ -78,40 +259,47 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     final now = DateTime.now();
     return [
       Recording(
-        id: '1',
-        name: 'Nagranie_${now.day}-${now.month}_08-30.mp4',
+        id: 'demo_1',
+        name: 'alarm_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_083000.mp4',
         createdTime: now.subtract(const Duration(hours: 2)),
-        cameraName: 'Kamera Frontowa',
+        cameraName: 'Kamera Raspberry Pi',
       ),
       Recording(
-        id: '2',
-        name: 'Nagranie_${now.day}-${now.month}_12-15.mp4',
+        id: 'demo_2',
+        name: 'alarm_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_121500.mp4',
         createdTime: now.subtract(const Duration(hours: 5)),
-        cameraName: 'Kamera Frontowa',
+        cameraName: 'Kamera Raspberry Pi',
       ),
       Recording(
-        id: '3',
-        name: 'Nagranie_${now.day - 1}-${now.month}_22-45.mp4',
+        id: 'demo_3',
+        name: 'alarm_${now.year}${now.month.toString().padLeft(2, '0')}${(now.day - 1).toString().padLeft(2, '0')}_224500.mp4',
         createdTime: now.subtract(const Duration(days: 1)),
-        cameraName: 'Kamera Frontowa',
+        cameraName: 'Kamera Raspberry Pi',
       ),
       Recording(
-        id: '4',
-        name: 'Nagranie_${now.day - 2}-${now.month}_14-20.mp4',
+        id: 'demo_4',
+        name: 'alarm_${now.year}${now.month.toString().padLeft(2, '0')}${(now.day - 2).toString().padLeft(2, '0')}_142000.mp4',
         createdTime: now.subtract(const Duration(days: 2)),
-        cameraName: 'Kamera Frontowa',
-      ),
-      Recording(
-        id: '5',
-        name: 'Nagranie_${now.day - 3}-${now.month}_09-00.mp4',
-        createdTime: now.subtract(const Duration(days: 3)),
-        cameraName: 'Kamera Frontowa',
+        cameraName: 'Kamera Raspberry Pi',
       ),
     ];
   }
 
   Future<void> _loadRecordings() async {
     if (!_isConnected) return;
+    
+    if (_isDemoMode) {
+      setState(() {
+        _recordings = _generateDemoRecordings();
+      });
+      return;
+    }
+    
+    await _loadRecordingsFromDrive();
+  }
+
+  Future<void> _loadRecordingsFromDrive() async {
+    if (_driveApi == null) return;
     
     if (mounted) {
       setState(() {
@@ -120,14 +308,83 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
       });
     }
 
-    // Symulacja odświeżania
-    await Future.delayed(const Duration(milliseconds: 800));
-    
-    if (mounted) {
+    try {
+      // Szukaj plików MP4 (nagrania z alarmu)
+      final fileList = await _driveApi!.files.list(
+        q: "mimeType='video/mp4' and trashed=false",
+        orderBy: 'createdTime desc',
+        spaces: 'drive',
+        $fields: 'files(id, name, thumbnailLink, createdTime, webViewLink, webContentLink)',
+        pageSize: 50,
+      );
+      
+      if (mounted) {
+        setState(() {
+          _recordings = (fileList.files ?? [])
+              .map((file) => Recording.fromDriveFile(file))
+              .toList();
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading recordings: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Nie udało się pobrać nagrań z Google Drive.';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _deleteRecording(Recording recording) async {
+    if (_isDemoMode) {
+      // W trybie demo usuwamy lokalnie
       setState(() {
-        _recordings = _generateDemoRecordings();
-        _isLoading = false;
+        _recordings.removeWhere((r) => r.id == recording.id);
       });
+      return;
+    }
+
+    if (_driveApi == null) return;
+
+    try {
+      await _driveApi!.files.delete(recording.id);
+      
+      if (mounted) {
+        setState(() {
+          _recordings.removeWhere((r) => r.id == recording.id);
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(child: Text('Usunięto: ${recording.name}')),
+              ],
+            ),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error deleting recording: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Nie udało się usunąć nagrania.'),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
     }
   }
 
@@ -242,7 +499,11 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
       physics: const AlwaysScrollableScrollPhysics(),
       itemCount: items.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (_, index) => _RecordingCard(recording: items[index]),
+      itemBuilder: (_, index) => _RecordingCard(
+        recording: items[index],
+        onDelete: () => _deleteRecording(items[index]),
+        isDemoMode: _isDemoMode,
+      ),
     );
   }
 
@@ -275,18 +536,18 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                         strokeWidth: 3,
                       ),
                     )
-                  : const Icon(Icons.folder_outlined, size: 64, color: Colors.white),
+                  : const Icon(Icons.cloud_outlined, size: 64, color: Colors.white),
             ),
             const SizedBox(height: 24),
             Text(
-              _isLoading ? 'Łączenie...' : 'Połącz dysk z nagraniami',
+              _isLoading ? 'Łączenie...' : 'Połącz z Google Drive',
               style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
             Text(
               _isLoading
-                  ? 'Trwa łączenie z dyskiem nagrań...'
-                  : 'Połącz się z dyskiem Raspberry Pi, aby przeglądać i zarządzać nagraniami z kamer.',
+                  ? 'Trwa logowanie do Google Drive...'
+                  : 'Zaloguj się kontem Google, aby przeglądać nagrania z systemu alarmowego przesłane przez Raspberry Pi.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
             ),
@@ -326,8 +587,16 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                         strokeWidth: 2,
                       ),
                     )
-                  : const Icon(Icons.link),
-              label: Text(_isLoading ? 'Łączenie...' : 'Podłącz dysk'),
+                  : const Icon(Icons.login),
+              label: Text(_isLoading ? 'Łączenie...' : 'Zaloguj przez Google'),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: _isLoading ? null : _enableDemoMode,
+              child: Text(
+                'Użyj trybu demo',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
             ),
           ],
         ),
@@ -343,35 +612,70 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
           height: 56,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: AppColors.accent.withValues(alpha: 0.25),
+            color: _isDemoMode 
+                ? Colors.orange.withValues(alpha: 0.25)
+                : AppColors.accent.withValues(alpha: 0.25),
           ),
-          child: const Icon(Icons.folder, color: Colors.white, size: 28),
+          child: Icon(
+            _isDemoMode ? Icons.science : Icons.cloud,
+            color: Colors.white,
+            size: 28,
+          ),
         ),
         const SizedBox(width: 16),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Połączono z dyskiem',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: AppColors.textSecondary),
+              Row(
+                children: [
+                  Text(
+                    _isDemoMode ? 'Tryb Demo' : 'Google Drive',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: AppColors.textSecondary),
+                  ),
+                  if (_isDemoMode) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'DEMO',
+                        style: TextStyle(
+                          color: Colors.orange,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
               Text(
                 _connectedDriveName,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
         ),
         IconButton(
+          onPressed: _loadRecordings,
+          icon: const Icon(Icons.refresh),
+          tooltip: 'Odśwież',
+        ),
+        IconButton(
           onPressed: _handleDisconnect,
-          icon: const Icon(Icons.link_off),
-          tooltip: 'Odłącz dysk',
+          icon: const Icon(Icons.logout),
+          tooltip: 'Wyloguj',
         ),
       ],
     );
@@ -404,9 +708,15 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
 }
 
 class _RecordingCard extends StatefulWidget {
-  const _RecordingCard({required this.recording});
+  const _RecordingCard({
+    required this.recording,
+    required this.onDelete,
+    required this.isDemoMode,
+  });
 
   final Recording recording;
+  final VoidCallback onDelete;
+  final bool isDemoMode;
 
   @override
   State<_RecordingCard> createState() => _RecordingCardState();
@@ -474,7 +784,11 @@ class _RecordingCardState extends State<_RecordingCard> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => _MoreOptionsSheet(recording: widget.recording),
+      builder: (context) => _MoreOptionsSheet(
+        recording: widget.recording,
+        onDelete: widget.onDelete,
+        isDemoMode: widget.isDemoMode,
+      ),
     );
   }
 
@@ -951,9 +1265,15 @@ class _VideoPlayerDialogState extends State<_VideoPlayerDialog> {
 
 /// Bottom sheet z dodatkowymi opcjami
 class _MoreOptionsSheet extends StatelessWidget {
-  const _MoreOptionsSheet({required this.recording});
+  const _MoreOptionsSheet({
+    required this.recording,
+    required this.onDelete,
+    required this.isDemoMode,
+  });
 
   final Recording recording;
+  final VoidCallback onDelete;
+  final bool isDemoMode;
 
   @override
   Widget build(BuildContext context) {
@@ -986,13 +1306,54 @@ class _MoreOptionsSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              recording.cameraName,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: AppColors.textSecondary,
-              ),
+            Row(
+              children: [
+                Text(
+                  recording.cameraName,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                if (isDemoMode) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text(
+                      'DEMO',
+                      style: TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ],
             ),
             const SizedBox(height: 24),
+            if (!isDemoMode && recording.webViewLink != null)
+              _OptionTile(
+                icon: Icons.open_in_browser,
+                label: 'Otwórz w Google Drive',
+                onTap: () async {
+                  Navigator.pop(context);
+                  final url = Uri.parse(recording.webViewLink!);
+                  if (await canLaunchUrl(url)) {
+                    await launchUrl(url, mode: LaunchMode.externalApplication);
+                  } else {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('Nie udało się otworzyć linku'),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          margin: const EdgeInsets.all(16),
+                        ),
+                      );
+                    }
+                  }
+                },
+              ),
             _OptionTile(
               icon: Icons.share_outlined,
               label: 'Udostępnij',
@@ -1000,7 +1361,9 @@ class _MoreOptionsSheet extends StatelessWidget {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: const Text('Funkcja udostępniania będzie dostępna wkrótce'),
+                    content: Text(isDemoMode 
+                        ? 'Funkcja niedostępna w trybie demo'
+                        : 'Funkcja udostępniania będzie dostępna wkrótce'),
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     margin: const EdgeInsets.all(16),
@@ -1013,16 +1376,16 @@ class _MoreOptionsSheet extends StatelessWidget {
               label: 'Szczegóły',
               onTap: () {
                 Navigator.pop(context);
-                _showDetailsDialog(context, recording);
+                _showDetailsDialog(context, recording, isDemoMode);
               },
             ),
             _OptionTile(
               icon: Icons.delete_outline,
-              label: 'Usuń nagranie',
+              label: isDemoMode ? 'Usuń (demo)' : 'Usuń z Google Drive',
               isDestructive: true,
               onTap: () {
                 Navigator.pop(context);
-                _showDeleteConfirmation(context, recording);
+                _showDeleteConfirmation(context, recording, onDelete, isDemoMode);
               },
             ),
             const SizedBox(height: 8),
@@ -1032,7 +1395,7 @@ class _MoreOptionsSheet extends StatelessWidget {
     );
   }
 
-  void _showDetailsDialog(BuildContext context, Recording recording) {
+  void _showDetailsDialog(BuildContext context, Recording recording, bool isDemoMode) {
     final theme = Theme.of(context);
     final createdTime = recording.createdTime;
     
@@ -1060,8 +1423,12 @@ class _MoreOptionsSheet extends StatelessWidget {
               value: '${createdTime.hour.toString().padLeft(2, '0')}:${createdTime.minute.toString().padLeft(2, '0')}',
             ),
             _DetailRow(label: 'Format', value: 'MP4 (H.264)'),
-            _DetailRow(label: 'Rozdzielczość', value: '1920x1080'),
-            _DetailRow(label: 'Rozmiar', value: '~45 MB'),
+            _DetailRow(label: 'Rozdzielczość', value: '1296x972'),
+            _DetailRow(label: 'Czas trwania', value: '~60s'),
+            if (!isDemoMode)
+              _DetailRow(label: 'Lokalizacja', value: 'Google Drive'),
+            if (isDemoMode)
+              _DetailRow(label: 'Status', value: 'Tryb Demo'),
           ],
         ),
         actions: [
@@ -1074,7 +1441,7 @@ class _MoreOptionsSheet extends StatelessWidget {
     );
   }
 
-  void _showDeleteConfirmation(BuildContext context, Recording recording) {
+  void _showDeleteConfirmation(BuildContext context, Recording recording, VoidCallback onDelete, bool isDemoMode) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1085,7 +1452,9 @@ class _MoreOptionsSheet extends StatelessWidget {
           style: TextStyle(color: Colors.white),
         ),
         content: Text(
-          'Czy na pewno chcesz usunąć nagranie "${recording.name}"? Tej operacji nie można cofnąć.',
+          isDemoMode
+              ? 'Czy na pewno chcesz usunąć "${recording.name}" z listy demo?'
+              : 'Czy na pewno chcesz trwale usunąć "${recording.name}" z Google Drive? Tej operacji nie można cofnąć.',
           style: TextStyle(color: AppColors.textSecondary),
         ),
         actions: [
@@ -1096,21 +1465,7 @@ class _MoreOptionsSheet extends StatelessWidget {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Row(
-                    children: [
-                      Icon(Icons.delete, color: Colors.white),
-                      SizedBox(width: 12),
-                      Text('Nagranie zostało usunięte'),
-                    ],
-                  ),
-                  backgroundColor: Colors.red.shade700,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  margin: const EdgeInsets.all(16),
-                ),
-              );
+              onDelete();
             },
             child: const Text('Usuń', style: TextStyle(color: Colors.redAccent)),
           ),
