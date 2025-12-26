@@ -4,6 +4,7 @@
 # Logs
 *.log
 log/
+raspberryPiConfig/Skrypty/log.txt
 
 # IDE / tooling
 .idea/
@@ -20,21 +21,19 @@ log/
 
 # Build outputs
 **/build/
-App/phoneapp/.firebase/
 
 # Android
 **/.gradle/
 **/local.properties
 
-# iOS / Xcode
-App/phoneapp/ios/Flutter/flutter_export_environment.sh
-App/phoneapp/ios/Flutter/Generated.xcconfig
-App/phoneapp/ios/Flutter/ephemeral/
-App/phoneapp/ios/.symlinks/
-App/phoneapp/ios/Pods/
-App/phoneapp/ios/Runner.xcworkspace/
+# iOS / Xcode (handled by subdirectory .gitignore)
 
 # Generated artifacts
 **/GeneratedPluginRegistrant.*
 **/*.g.dart
 
+# Secrets / credentials
+raspberryPiConfig/Skrypty/secure_config.py
+**/*.keystore
+**/*.jks
+**/key.properties
