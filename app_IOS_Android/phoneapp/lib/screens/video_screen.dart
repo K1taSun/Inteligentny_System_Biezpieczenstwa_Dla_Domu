@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:phoneapp/theme/app_theme.dart';
 import 'package:phoneapp/utils/responsive.dart';
 import 'package:video_player/video_player.dart';
@@ -53,6 +54,24 @@ class _VideoScreenState extends State<VideoScreen> {
       _isMuted = !_isMuted;
       _controller.setVolume(_isMuted ? 0 : 1);
     });
+  }
+
+  void _openFullScreen() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => _FullScreenPlayer(
+          controller: _controller,
+          camera: _entryCamera,
+          isMuted: _isMuted,
+          onMuteChanged: (muted) {
+            setState(() {
+              _isMuted = muted;
+              _controller.setVolume(muted ? 0 : 1);
+            });
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -118,6 +137,7 @@ class _VideoScreenState extends State<VideoScreen> {
                   isPlaying: _controller.value.isPlaying,
                   onToggleMute: _toggleMute,
                   onTogglePlayback: _togglePlayback,
+                  onFullScreen: _openFullScreen,
                 ),
               ],
             ),
@@ -323,6 +343,7 @@ class _VideoOverlay extends StatelessWidget {
     required this.isPlaying,
     required this.onToggleMute,
     required this.onTogglePlayback,
+    required this.onFullScreen,
   });
 
   final _Camera camera;
@@ -330,6 +351,7 @@ class _VideoOverlay extends StatelessWidget {
   final bool isPlaying;
   final VoidCallback onToggleMute;
   final VoidCallback onTogglePlayback;
+  final VoidCallback onFullScreen;
 
   @override
   Widget build(BuildContext context) {
@@ -357,6 +379,11 @@ class _VideoOverlay extends StatelessWidget {
           _OverlayButton(
             icon: isMuted ? Icons.volume_off : Icons.volume_up,
             onTap: onToggleMute,
+          ),
+          SizedBox(width: Responsive.padding(isSmall ? 8 : 10)),
+          _OverlayButton(
+            icon: Icons.fullscreen,
+            onTap: onFullScreen,
           ),
           const Spacer(),
           Column(
@@ -412,6 +439,185 @@ class _OverlayButton extends StatelessWidget {
           border: Border.all(color: Colors.white24),
         ),
         child: Icon(icon, color: Colors.white, size: iconSize),
+      ),
+    );
+  }
+}
+
+/// Minimalistyczny odtwarzacz pełnoekranowy
+class _FullScreenPlayer extends StatefulWidget {
+  const _FullScreenPlayer({
+    required this.controller,
+    required this.camera,
+    required this.isMuted,
+    required this.onMuteChanged,
+  });
+
+  final VideoPlayerController controller;
+  final _Camera camera;
+  final bool isMuted;
+  final ValueChanged<bool> onMuteChanged;
+
+  @override
+  State<_FullScreenPlayer> createState() => _FullScreenPlayerState();
+}
+
+class _FullScreenPlayerState extends State<_FullScreenPlayer> {
+  late bool _isMuted;
+
+  @override
+  void initState() {
+    super.initState();
+    _isMuted = widget.isMuted;
+    // Wymuś orientację poziomą po wejściu
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+  }
+
+  @override
+  void dispose() {
+    // Przywróć orientację pionową po wyjściu
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
+    super.dispose();
+  }
+
+  void _togglePlayback() {
+    setState(() {
+      widget.controller.value.isPlaying 
+          ? widget.controller.pause() 
+          : widget.controller.play();
+    });
+  }
+
+  void _toggleMute() {
+    setState(() {
+      _isMuted = !_isMuted;
+      widget.onMuteChanged(_isMuted);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Video
+          Center(
+            child: AspectRatio(
+              aspectRatio: widget.controller.value.aspectRatio,
+              child: VideoPlayer(widget.controller),
+            ),
+          ),
+          
+          // Controls Overlay
+          SafeArea(
+            child: Column(
+              children: [
+                // Top bar
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withValues(alpha: 0.8),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'LIVE',
+                          style: TextStyle(
+                            color: Colors.white, 
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          widget.camera.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            shadows: [
+                              Shadow(color: Colors.black, blurRadius: 4),
+                            ],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const Spacer(),
+                
+                // Bottom controls
+                Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _FullScreenButton(
+                        icon: widget.controller.value.isPlaying 
+                            ? Icons.pause_rounded 
+                            : Icons.play_arrow_rounded,
+                        onTap: _togglePlayback,
+                      ),
+                      const SizedBox(width: 24),
+                      _FullScreenButton(
+                        icon: _isMuted 
+                            ? Icons.volume_off_rounded 
+                            : Icons.volume_up_rounded,
+                        onTap: _toggleMute,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FullScreenButton extends StatelessWidget {
+  const _FullScreenButton({required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.2),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: Colors.white, size: 32),
       ),
     );
   }

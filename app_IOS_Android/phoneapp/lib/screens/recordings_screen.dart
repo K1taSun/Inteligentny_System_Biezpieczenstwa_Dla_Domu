@@ -493,15 +493,22 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     if (_isLoading) {
       return ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: 4,
+        padding: EdgeInsets.zero,
+        itemCount: 5,
         separatorBuilder: (_, __) => SizedBox(height: spacing),
-        itemBuilder: (_, __) => const _RecordingSkeleton(),
+        itemBuilder: (_, index) {
+          if (index == 4) {
+            return SizedBox(height: Responsive.padding(180));
+          }
+          return const _RecordingSkeleton();
+        },
       );
     }
 
     if (_errorMessage != null) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
         children: [
           SizedBox(height: Responsive.padding(60)),
           _CenteredMessage(
@@ -510,6 +517,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
             icon: Icons.refresh,
             onAction: _loadRecordings,
           ),
+          SizedBox(height: Responsive.padding(180)),
         ],
       );
     }
@@ -518,6 +526,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     if (items.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
         children: [
           SizedBox(height: Responsive.padding(60)),
           _CenteredMessage(
@@ -526,19 +535,26 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
             icon: Icons.filter_alt_off,
             onAction: _clearFilters,
           ),
+          SizedBox(height: Responsive.padding(180)),
         ],
       );
     }
 
     return ListView.separated(
       physics: const AlwaysScrollableScrollPhysics(),
-      itemCount: items.length,
+      padding: EdgeInsets.zero,
+      itemCount: items.length + 1,
       separatorBuilder: (_, __) => SizedBox(height: spacing),
-      itemBuilder: (_, index) => _RecordingCard(
-        recording: items[index],
-        onDelete: () => _deleteRecording(items[index]),
-        isDemoMode: _isDemoMode,
-      ),
+      itemBuilder: (_, index) {
+        if (index == items.length) {
+          return SizedBox(height: Responsive.padding(180));
+        }
+        return _RecordingCard(
+          recording: items[index],
+          onDelete: () => _deleteRecording(items[index]),
+          isDemoMode: _isDemoMode,
+        );
+      },
     );
   }
 
@@ -551,17 +567,20 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     final iconContainerPadding = Responsive.padding(isSmall ? 18 : 24);
     final iconSize = Responsive.iconSize(isSmall ? 48 : 64);
     
-    return Align(
-      alignment: const Alignment(0, -0.5),
-      child: Container(
-        padding: EdgeInsets.all(cardPadding),
-        decoration: BoxDecoration(
-          color: AppColors.navy,
-          borderRadius: BorderRadius.circular(cardRadius),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+    return Center(
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: EdgeInsets.only(bottom: Responsive.padding(120)),
+        child: Container(
+          margin: EdgeInsets.symmetric(vertical: Responsive.padding(24)),
+          padding: EdgeInsets.all(cardPadding),
+          decoration: BoxDecoration(
+            color: AppColors.navy,
+            borderRadius: BorderRadius.circular(cardRadius),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               padding: EdgeInsets.all(iconContainerPadding),
@@ -673,6 +692,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -916,6 +936,7 @@ class _RecordingCardState extends State<_RecordingCard> {
         border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           // Thumbnail z przyciskiem play
           GestureDetector(
@@ -1031,15 +1052,19 @@ class _RecordingCardState extends State<_RecordingCard> {
           ),
           // Pasek postępu pobierania
           if (_isDownloading)
-            LinearProgressIndicator(
-              value: _downloadProgress,
-              backgroundColor: AppColors.midnight,
-              valueColor: AlwaysStoppedAnimation<Color>(AppColors.accent),
-              minHeight: 3,
+            SizedBox(
+              height: 3,
+              child: LinearProgressIndicator(
+                value: _downloadProgress,
+                backgroundColor: AppColors.midnight,
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.accent),
+                minHeight: 3,
+              ),
             ),
           Padding(
             padding: EdgeInsets.all(contentPadding),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -1060,11 +1085,14 @@ class _RecordingCardState extends State<_RecordingCard> {
                       color: AppColors.textSecondary,
                     ),
                     SizedBox(width: Responsive.padding(6)),
-                    Text(
-                      dateString,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                        fontSize: Responsive.fontSize(isSmall ? 11 : 12),
+                    Flexible(
+                      child: Text(
+                        dateString,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: AppColors.textSecondary,
+                          fontSize: Responsive.fontSize(isSmall ? 11 : 12),
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     SizedBox(width: Responsive.padding(isSmall ? 12 : 16)),
@@ -1074,11 +1102,14 @@ class _RecordingCardState extends State<_RecordingCard> {
                       color: AppColors.textSecondary,
                     ),
                     SizedBox(width: Responsive.padding(6)),
-                    Text(
-                      timeString,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                        fontSize: Responsive.fontSize(isSmall ? 11 : 12),
+                    Flexible(
+                      child: Text(
+                        timeString,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: AppColors.textSecondary,
+                          fontSize: Responsive.fontSize(isSmall ? 11 : 12),
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
