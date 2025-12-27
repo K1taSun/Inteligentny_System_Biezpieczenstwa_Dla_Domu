@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:phoneapp/screens/recordings_screen.dart';
 import 'package:phoneapp/screens/status_screen.dart';
 import 'package:phoneapp/screens/video_screen.dart';
+import 'package:phoneapp/utils/responsive.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -27,10 +28,28 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Inicjalizacja responsywności
+    Responsive.init(context);
+    
+    // Responsywne wartości
+    final horizontalPadding = Responsive.padding(20);
+    final topPadding = Responsive.padding(16);
+    final navBarPadding = Responsive.padding(16);
+    final navBarBottomPadding = Responsive.padding(8);
+    final navBarRadius = Responsive.radius(28);
+    final navBarHeight = Responsive.navBarHeight;
+    
     return Scaffold(
       extendBody: true,
       appBar: AppBar(
-        title: Text(_titles[_selectedIndex]),
+        title: Text(
+          _titles[_selectedIndex],
+          style: TextStyle(
+            fontSize: Responsive.fontSize(20),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        toolbarHeight: Responsive.height(56),
       ),
       body: SafeArea(
         bottom: false,
@@ -56,7 +75,12 @@ class _MainScreenState extends State<MainScreen> {
             ),
             child: Padding(
               key: ValueKey(_selectedIndex),
-              padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 0),
+              padding: EdgeInsets.only(
+                left: horizontalPadding,
+                right: horizontalPadding,
+                top: topPadding,
+                bottom: 0,
+              ),
               child: _screens[_selectedIndex],
             ),
           ),
@@ -64,34 +88,57 @@ class _MainScreenState extends State<MainScreen> {
       ),
       bottomNavigationBar: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          padding: EdgeInsets.fromLTRB(
+            navBarPadding,
+            0,
+            navBarPadding,
+            navBarBottomPadding,
+          ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(navBarRadius),
             child: NavigationBar(
-              
               backgroundColor: Theme.of(context).colorScheme.surface,
               surfaceTintColor: Colors.transparent,
               shadowColor: Colors.black26,
               elevation: 3,
-
               selectedIndex: _selectedIndex,
               onDestinationSelected: (index) => setState(() => _selectedIndex = index),
-              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-              height: 70,
-              destinations: const [
+              labelBehavior: Responsive.isSmallDevice
+                  ? NavigationDestinationLabelBehavior.onlyShowSelected
+                  : NavigationDestinationLabelBehavior.alwaysShow,
+              height: navBarHeight,
+              destinations: [
                 NavigationDestination(
-                  icon: Icon(Icons.home_outlined),
-                  selectedIcon: Icon(Icons.home_rounded),
+                  icon: Icon(
+                    Icons.home_outlined,
+                    size: Responsive.iconSize(24),
+                  ),
+                  selectedIcon: Icon(
+                    Icons.home_rounded,
+                    size: Responsive.iconSize(24),
+                  ),
                   label: 'Status',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.videocam_outlined),
-                  selectedIcon: Icon(Icons.videocam_rounded),
+                  icon: Icon(
+                    Icons.videocam_outlined,
+                    size: Responsive.iconSize(24),
+                  ),
+                  selectedIcon: Icon(
+                    Icons.videocam_rounded,
+                    size: Responsive.iconSize(24),
+                  ),
                   label: 'Video',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.folder_outlined),
-                  selectedIcon: Icon(Icons.folder_rounded),
+                  icon: Icon(
+                    Icons.folder_outlined,
+                    size: Responsive.iconSize(24),
+                  ),
+                  selectedIcon: Icon(
+                    Icons.folder_rounded,
+                    size: Responsive.iconSize(24),
+                  ),
                   label: 'Nagrania',
                 ),
               ],
@@ -102,4 +149,3 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 }
-

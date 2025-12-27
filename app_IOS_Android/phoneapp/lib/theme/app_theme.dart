@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:phoneapp/utils/responsive.dart';
 
 class AppColors {
   static const Color midnight = Color(0xFF050E1F);
@@ -100,5 +101,132 @@ class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     );
+  }
+  
+  /// Tworzy responsywny TextTheme bazując na rozmiarze ekranu
+  static TextTheme responsiveTextTheme(BuildContext context) {
+    Responsive.init(context);
+    
+    final baseTheme = GoogleFonts.montserratTextTheme();
+    
+    return TextTheme(
+      displayLarge: baseTheme.displayLarge?.copyWith(
+        fontSize: Responsive.fontSize(57),
+        color: AppColors.textPrimary,
+      ),
+      displayMedium: baseTheme.displayMedium?.copyWith(
+        fontSize: Responsive.fontSize(45),
+        color: AppColors.textPrimary,
+      ),
+      displaySmall: baseTheme.displaySmall?.copyWith(
+        fontSize: Responsive.fontSize(36),
+        color: AppColors.textPrimary,
+      ),
+      headlineLarge: baseTheme.headlineLarge?.copyWith(
+        fontSize: Responsive.fontSize(32),
+        color: AppColors.textPrimary,
+      ),
+      headlineMedium: baseTheme.headlineMedium?.copyWith(
+        fontSize: Responsive.fontSize(28),
+        color: AppColors.textPrimary,
+      ),
+      headlineSmall: baseTheme.headlineSmall?.copyWith(
+        fontSize: Responsive.fontSize(24),
+        color: AppColors.textPrimary,
+      ),
+      titleLarge: baseTheme.titleLarge?.copyWith(
+        fontSize: Responsive.fontSize(22),
+        color: AppColors.textPrimary,
+      ),
+      titleMedium: baseTheme.titleMedium?.copyWith(
+        fontSize: Responsive.fontSize(16),
+        color: AppColors.textPrimary,
+      ),
+      titleSmall: baseTheme.titleSmall?.copyWith(
+        fontSize: Responsive.fontSize(14),
+        color: AppColors.textPrimary,
+      ),
+      bodyLarge: baseTheme.bodyLarge?.copyWith(
+        fontSize: Responsive.fontSize(16),
+        color: AppColors.textPrimary,
+      ),
+      bodyMedium: baseTheme.bodyMedium?.copyWith(
+        fontSize: Responsive.fontSize(14),
+        color: AppColors.textPrimary,
+      ),
+      bodySmall: baseTheme.bodySmall?.copyWith(
+        fontSize: Responsive.fontSize(12),
+        color: AppColors.textPrimary,
+      ),
+      labelLarge: baseTheme.labelLarge?.copyWith(
+        fontSize: Responsive.fontSize(14),
+        color: AppColors.textPrimary,
+      ),
+      labelMedium: baseTheme.labelMedium?.copyWith(
+        fontSize: Responsive.fontSize(12),
+        color: AppColors.textPrimary,
+      ),
+      labelSmall: baseTheme.labelSmall?.copyWith(
+        fontSize: Responsive.fontSize(11),
+        color: AppColors.textPrimary,
+      ),
+    );
+  }
+}
+
+/// Pomocnicze rozszerzenie do responsywnych rozmiarów
+extension ResponsiveSizes on BuildContext {
+  /// Inicjalizuje Responsive i zwraca rozmiar ekranu
+  ScreenSize get screenSize {
+    Responsive.init(this);
+    return Responsive.screenSize;
+  }
+  
+  /// Czy to małe urządzenie?
+  bool get isSmallDevice {
+    Responsive.init(this);
+    return Responsive.isSmallDevice;
+  }
+  
+  /// Czy to tablet?
+  bool get isTablet {
+    Responsive.init(this);
+    return Responsive.isTablet;
+  }
+  
+  /// Responsywny padding
+  double rp(double value) {
+    Responsive.init(this);
+    return Responsive.padding(value);
+  }
+  
+  /// Responsywny rozmiar czcionki
+  double rf(double value) {
+    Responsive.init(this);
+    return Responsive.fontSize(value);
+  }
+  
+  /// Responsywny rozmiar ikony
+  double ri(double value) {
+    Responsive.init(this);
+    return Responsive.iconSize(value);
+  }
+  
+  /// Responsywny radius
+  double rr(double value) {
+    Responsive.init(this);
+    return Responsive.radius(value);
+  }
+  
+  /// Responsywna wysokość
+  double rh(double value) {
+    Responsive.init(this);
+    return Responsive.height(value);
+  }
+  
+  /// Responsywna wartość sp
+  double r(double value) {
+    Responsive.init(this);
+    return Responsive.sp(value);
   }
 }
