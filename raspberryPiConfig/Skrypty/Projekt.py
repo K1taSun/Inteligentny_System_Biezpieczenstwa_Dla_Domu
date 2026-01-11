@@ -14,9 +14,9 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 from google.oauth2 import service_account
 
-# ==========================================
+
 # KONFIGURACJA I IMPORTY
-# ==========================================
+
 try:
 	from secure_config import (
 		SERIAL_PORT,              # Port Arduino (np. /dev/ttyACM0)
@@ -33,21 +33,21 @@ try:
 	)
 except ImportError as exc:
 	raise RuntimeError(
-		"⛔ BRAK PLIKU secure_config.py!\n"
+		"BRAK PLIKU secure_config.py!\n"
 		"Skopiuj plik 'secure_config_template.py', nazwij go 'secure_config.py' i wpisz tam swoje hasła."
 	) from exc
 
-# ==========================================
+
 # INICJALIZACJA
-# ==========================================
+
 
 # Tworzymy folder na nagrania, żeby kamera miała gdzie pisać
 if not os.path.exists(RECORDINGS_FOLDER):
 	try:
 		os.makedirs(RECORDINGS_FOLDER)
-		print(f"📁 Utworzono folder na nagrania: {RECORDINGS_FOLDER}")
+		print(f"Utworzono folder na nagrania: {RECORDINGS_FOLDER}")
 	except OSError as e:
-		print(f"❌ Nie udało się utworzyć folderu {RECORDINGS_FOLDER}: {e}")
+		print(f"Nie udało się utworzyć folderu {RECORDINGS_FOLDER}: {e}")
 
 # Próbujemy połączyć się z Arduino (pętla, aż się uda)
 ser = None
@@ -55,9 +55,9 @@ while ser is None:
     try:
         ser = serial.Serial(SERIAL_PORT, 9600, timeout=1)
         time.sleep(2) # Arduino resetuje się po połączeniu, daj mu chwilę
-        print(f"✅ Połączono z Arduino na porcie: {SERIAL_PORT}")
+        print(f"Połączono z Arduino na porcie: {SERIAL_PORT}")
     except serial.SerialException as e:
-        print(f"⏳ Czekam na podłączenie Arduino do {SERIAL_PORT}... ({e})")
+        print(f"Czekam na podłączenie Arduino do {SERIAL_PORT}... ({e})")
         time.sleep(5) # Spróbuj ponownie za 5 sekund
 
 # To zmienna dla Google Drive, żeby nie logować się co chwilę
@@ -76,12 +76,11 @@ def get_drive_service():
 		drive_service = build('drive', 'v3', credentials=creds)
 		return drive_service
 	except Exception as e:
-		print(f"❌ Nie udało się zalogować do Google Drive: {e}")
+		print(f"Nie udało się zalogować do Google Drive: {e}")
 		return None
 
-# ==========================================
 # FUNKCJE POMOCNICZE
-# ==========================================
+
 
 def nagraj_wideo():
 	"""
@@ -115,15 +114,15 @@ def nagraj_wideo():
 				stdout=subprocess.DEVNULL, # Nie wypisuj śmieci na ekran
 				stderr=subprocess.DEVNULL
 			)
-			print(f"✅ Film gotowy: {plik_mp4}")
+			print(f"Film gotowy: {plik_mp4}")
 			os.remove(plik_h264) # Kasujemy plik tymczasowy
 			return plik_mp4
 		else:
-			print(f"❌ Coś poszło nie tak - brak pliku z kamery!")
+			print(f"Coś poszło nie tak - brak pliku z kamery!")
 			return None
 			
 	except Exception as e:
-		print(f"❌ Błąd kamery (czy jest podłączona?): {e}")
+		print(f"Błąd kamery (czy jest podłączona?): {e}")
 		return None
 
 def mail_alarmowy():
@@ -140,9 +139,9 @@ def mail_alarmowy():
 			server.login(SMTP_USER, SMTP_PASS)
 			server.sendmail(SMTP_USER, SMTP_SEND_TO, msg.as_string())
 			
-		print("📧 Mail alarmowy wysłany!")
+		print("Mail alarmowy wysłany!")
 	except Exception as e:
-		print(f"❌ Nie udało się wysłać maila (sprawdź hasło/internet): {e}")
+		print(f"Nie udało się wysłać maila (sprawdź hasło/internet): {e}")
 
 def gDrive_upload():
 	"""Wrzuca nowe filmy na Google Drive, żebyś mógł je zobaczyć w aplikacji."""
@@ -164,7 +163,7 @@ def gDrive_upload():
 		if not service:
 			return
 
-		print("☁️ Sprawdzam, czy są nowe filmy do wysłania...")
+		print("Sprawdzam, czy są nowe filmy do wysłania...")
 		uploaded_files = load_uploaded_files()
 		
 		files_found = False
@@ -183,7 +182,7 @@ def gDrive_upload():
 
 				media = MediaFileUpload(file_path, mimetype='video/mp4', resumable=True)
 
-				print(f'   ⬆️ Wysyłam: {filename} ...')
+				print(f'Wysyłam: {filename} ...')
 				service.files().create(
 					body=file_metadata,
 					media_body=media,
@@ -191,15 +190,15 @@ def gDrive_upload():
 				).execute(num_retries=3) # Spróbuj 3 razy, jakby zerwało neta
 
 				save_uploaded_file(filename)
-				print(f'   ✅ Wysłano sukcesywnie!')
+				print(f'Wysłano sukcesywnie!')
 		
 		if not files_found:
-			print("☁️ Wszystko aktualne, brak nowych nagrań.")
+			print("Wszystko aktualne, brak nowych nagrań.")
 		else:
-			print("☁️ Synchronizacja zakończona.")
+			print("Synchronizacja zakończona.")
 
 	except Exception as e:
-		print(f"❌ Problem z Google Drive (Upload): {e}")
+		print(f"Problem z Google Drive (Upload): {e}")
 
 def procedura_alarmowa():
 	"""
@@ -223,9 +222,9 @@ def procedura_alarmowa():
 	mail_thread.join(timeout=10)
 	print("<<< [ALARM] Procedura zakończona. Czuwam dalej. >>>")
 
-# ==========================================
+
 # ZDALNE STEROWANIE (REMOTE CONTROL)
-# ==========================================
+
 
 REMOTE_FILE_NAME = "remote_status.json"
 last_known_remote_state = None
@@ -276,34 +275,33 @@ def check_remote_commands():
 				
 				# Jeśli stan na Dysku jest inny niż ten, który pamiętamy
 				if last_known_remote_state != remote_armed:
-					print(f"📡 Aplikacja zmieniła status na: {'UZBROJONY' if remote_armed else 'ROZBROJONY'}")
+					print(f" Aplikacja zmieniła status na: {'UZBROJONY' if remote_armed else 'ROZBROJONY'}")
 					
 					command = "ACTIVATE" if remote_armed else "DEACTIVATE"
 					
 					if ser and ser.is_open:
 						ser.write((command + "\n").encode('utf-8'))
-						print(f"➡️ Wysyłam komendę do Arduino: {command}")
+						print(f"Wysyłam komendę do Arduino: {command}")
 						last_known_remote_state = remote_armed
 					else:
-						print("⚠️ Chciałem zmienić stan, ale Arduino jest odłączone!")
+						print("Chciałem zmienić stan, ale Arduino jest odłączone!")
 						
 		except json.JSONDecodeError:
-			print("⚠️ Plik sterujący jest uszkodzony (zły JSON)")
+			print("Plik sterujący jest uszkodzony (zły JSON)")
 
 	except Exception as e:
 		# Błędy sieciowe są normalne, nie panikuj
-		print(f"⚠️ Nie udało się sprawdzić komend (brak neta?): {e}")
+		print(f" Nie udało się sprawdzić komend (brak neta?): {e}")
 
 def watek_zdalnego_sterowania():
 	"""Uruchamia pętlę sprawdzania komend w tle."""
-	print("📡 Uruchamiam nasłuch zdalnego sterowania (co 5 sekund)...")
+	print(" Uruchamiam nasłuch zdalnego sterowania (co 5 sekund)...")
 	while True:
 		check_remote_commands()
 		time.sleep(5) # Sprawdzaj co 5 sekund
 
-# ==========================================
 # PĘTLA GŁÓWNA
-# ==========================================
+
 
 print("=== SYSTEM GOTOWY I NASŁUCHUJE ===")
 alarm_aktywny = False
@@ -320,7 +318,7 @@ try:
 					raw_line = ser.readline()
 					line = raw_line.decode('utf-8').strip()
 				except UnicodeDecodeError:
-					print(f"⚠️ Dostałem śmieci z Arduino (zakłócenia): {raw_line}")
+					print(f"Dostałem śmieci z Arduino (zakłócenia): {raw_line}")
 					continue
 				
 				if line:
@@ -330,7 +328,7 @@ try:
 				# Jeśli Arduino krzyczy, że jest alarm
 				if "SYSTEM: Alarm AKTYWNY!" in line and not alarm_aktywny:
 					alarm_aktywny = True
-					print("🚨 !!! WŁAMANIE !!! 🚨")
+					print("!!! WŁAMANIE !!! ")
 					
 					# Odpalamy całą maszynę (mail, wideo, chmura) w tle
 					threading.Thread(target=procedura_alarmowa, daemon=True).start()
@@ -338,23 +336,23 @@ try:
 				# Jeśli alarm się uspokoił
 				elif "SYSTEM: Alarm WYŁĄCZONY." in line and alarm_aktywny:
 					alarm_aktywny = False
-					print("🟢 Sytuacja opanowana - alarm wyłączony.")
+					print("Sytuacja opanowana - alarm wyłączony.")
 
 			# Krótka drzemka dla procesora
 			time.sleep(0.05)
 			
 		except OSError as e:
-			print(f"❌ Odłączono Arduino! Próbuję połączyć ponownie... ({e})")
+			print(f"Odłączono Arduino! Próbuję połączyć ponownie... ({e})")
 			time.sleep(5)
 			try:
 				ser.close()
 				ser = serial.Serial(SERIAL_PORT, 9600, timeout=1)
-				print("♻️ Uff, wróciło połączenie.")
+				print("Uff, wróciło połączenie.")
 			except:
 				pass
 
 except KeyboardInterrupt:
-	print("\n🛑 Zatrzymuję system na żądanie użytkownika...")
+	print("\nZatrzymuję system na żądanie użytkownika...")
 	if ser:
 		ser.close()
-	print("Do widzenia! 👋")
+	print("Do widzenia!")
