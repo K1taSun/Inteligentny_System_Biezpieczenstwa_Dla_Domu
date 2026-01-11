@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:phoneapp/screens/main_shell.dart';
 import 'package:phoneapp/theme/app_theme.dart';
 import 'package:phoneapp/utils/responsive.dart';
+import 'package:googleapis/drive/v3.dart' as drive;
+import 'dart:convert';
+import 'dart:async';
 
 class StatusScreen extends StatefulWidget {
   const StatusScreen({super.key});
@@ -10,9 +14,15 @@ class StatusScreen extends StatefulWidget {
 }
 
 class _StatusScreenState extends State<StatusScreen> {
-  bool _isArmed = true;
+  bool _isArmed = false;
+  bool _isLoading = false;
   final double _temperature = 21.4;
   final double _humidity = 47;
+  final GoogleAuthService _authService = GoogleAuthService();
+  
+  // Nazwa pliku do sterowania
+  static const String _remoteFileName = 'remote_status.json';
+
   final List<_SecurityEvent> _events = const [
     _SecurityEvent(
       title: 'Ruch wykryty - Salon',
@@ -28,10 +38,152 @@ class _StatusScreenState extends State<StatusScreen> {
     ),
   ];
 
-  void _toggleAlarm() {
+  @override
+  void initState() {
+    super.initState();
+    // Nasłuchuj zmian autoryzacji
+    _authService.addListener(_onAuthChanged);
+    // Jeśli już połączony, sprawdź status
+    if (_authService.isConnected) {
+      _fetchRemoteStatus();
+    }
+  }
+
+  @override
+  void dispose() {
+    _authService.removeListener(_onAuthChanged);
+    super.dispose();
+  }
+
+  void _onAuthChanged() {
+    if (mounted) {
+      if (_authService.isConnected) {
+        _fetchRemoteStatus();
+      } else {
+        setState(() => _isArmed = false);
+      }
+    }
+  }
+
+  Future<void> _fetchRemoteStatus() async {
+    if (!_authService.isConnected || _authService.driveApi == null) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final driveApi = _authService.driveApi!;
+      
+      // Szukaj pliku
+      final fileList = await driveApi.files.list(
+        q: "name = '$_remoteFileName' and trashed = false",
+        spaces: 'drive',
+        $fields: 'files(id, name)',
+      );
+
+      if (fileList.files != null && fileList.files!.isNotEmpty) {
+        final fileId = fileList.files!.first.id!;
+        
+        // Pobierz zawartość
+        final media = await driveApi.files.get(
+          fileId,
+          downloadOptions: drive.DownloadOptions.fullMedia,
+        ) as drive.Media;
+
+        final stream = media.stream;
+        final content = await utf8.decodeStream(stream);
+        final data = jsonDecode(content);
+
+        if (mounted && data['armed'] != null) {
+          setState(() {
+            _isArmed = data['armed'];
+            _isLoading = false;
+          });
+        }
+      } else {
+        // Plik nie istnieje - domyślnie rozbrojony
+        if (mounted) setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      debugPrint('Error fetching status: $e');
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _toggleAlarm() async {
+    if (!_authService.isConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Zaloguj się do chmury (ikona w rogu), aby sterować alarmem.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final newState = !_isArmed;
+    
+    // Optymistyczna aktualizacja UI
     setState(() {
-      _isArmed = !_isArmed;
+      _isArmed = newState;
+      _isLoading = true;
     });
+
+    try {
+      final driveApi = _authService.driveApi!;
+      
+      // Przygotuj JSON
+      final content = jsonEncode({'armed': newState, 'timestamp': DateTime.now().toIso8601String()});
+      final media = drive.Media(
+        Stream.value(utf8.encode(content)),
+        utf8.encode(content).length,
+      );
+
+      // Sprawdź czy plik istnieje
+      final fileList = await driveApi.files.list(
+        q: "name = '$_remoteFileName' and trashed = false",
+        spaces: 'drive',
+        $fields: 'files(id)',
+      );
+
+      if (fileList.files != null && fileList.files!.isNotEmpty) {
+        // Aktualizuj istniejący
+        final fileId = fileList.files!.first.id!;
+        await driveApi.files.update(
+          drive.File(),
+          fileId,
+          uploadMedia: media,
+        );
+      } else {
+        // Utwórz nowy
+        await driveApi.files.create(
+          drive.File(name: _remoteFileName, parents: []), // Root folder
+          uploadMedia: media,
+        );
+      }
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(newState ? 'Wysłano komendę UZBROJENIA' : 'Wysłano komendę ROZBROJENIA'),
+            backgroundColor: newState ? AppColors.accent : Colors.grey,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error toggling alarm: $e');
+      // Cofnij zmianę w razie błędu
+      if (mounted) {
+        setState(() {
+          _isArmed = !newState;
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Błąd komunikacji z chmurą!'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   @override
@@ -54,6 +206,8 @@ class _StatusScreenState extends State<StatusScreen> {
             isArmed: _isArmed,
             statusColor: statusColor,
             onToggle: _toggleAlarm,
+            isLoading: _isLoading,
+            isConnected: _authService.isConnected,
           ),
           SizedBox(height: sectionSpacing),
           Text(
@@ -138,11 +292,15 @@ class _HeroCard extends StatelessWidget {
     required this.isArmed,
     required this.statusColor,
     required this.onToggle,
+    required this.isLoading,
+    required this.isConnected,
   });
 
   final bool isArmed;
   final Color statusColor;
   final VoidCallback onToggle;
+  final bool isLoading;
+  final bool isConnected;
 
   @override
   Widget build(BuildContext context) {
@@ -214,31 +372,43 @@ class _HeroCard extends StatelessWidget {
                 ),
               ),
               SizedBox(width: Responsive.padding(8)),
-              Transform.scale(
-                scale: isSmall ? 0.8 : 0.9,
-                alignment: Alignment.centerRight,
-                child: Switch.adaptive(
-                  value: isArmed,
-                  onChanged: (_) => onToggle(),
-                  thumbColor: WidgetStateProperty.resolveWith(
-                    (states) => states.contains(WidgetState.selected)
-                        ? AppColors.midnight
-                        : Colors.white,
+              if (isLoading)
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
                   ),
-                  trackColor: WidgetStateProperty.resolveWith(
-                    (states) => states.contains(WidgetState.selected)
-                        ? AppColors.accent.withValues(alpha: 0.7)
-                        : Colors.white.withValues(alpha: 0.3),
+                )
+              else
+                Transform.scale(
+                  scale: isSmall ? 0.8 : 0.9,
+                  alignment: Alignment.centerRight,
+                  child: Switch.adaptive(
+                    value: isArmed,
+                    onChanged: isConnected ? (_) => onToggle() : null,
+                    thumbColor: WidgetStateProperty.resolveWith(
+                      (states) => states.contains(WidgetState.selected)
+                          ? AppColors.midnight
+                          : Colors.white,
+                    ),
+                    trackColor: WidgetStateProperty.resolveWith(
+                      (states) => states.contains(WidgetState.selected)
+                          ? AppColors.accent.withValues(alpha: 0.7)
+                          : Colors.white.withValues(alpha: 0.3),
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           SizedBox(height: verticalSpacing),
           Text(
-            isArmed
-                ? 'Wszystkie strefy są zabezpieczone. Czujniki aktywne.'
-                : 'System w trybie podglądu. Aktywuj, aby chronić dom.',
+            !isConnected
+                ? 'Połącz z chmurą, aby sterować.'
+                : isArmed
+                    ? 'Wszystkie strefy są zabezpieczone. Czujniki aktywne.'
+                    : 'System w trybie podglądu. Aktywuj, aby chronić dom.',
             style: theme.textTheme.bodyLarge?.copyWith(
               color: Colors.white.withValues(alpha: 0.9),
               height: 1.4,
@@ -279,7 +449,7 @@ class _HeroCard extends StatelessWidget {
                 SizedBox(width: Responsive.padding(8)),
                 Flexible(
                   child: Text(
-                    isArmed ? 'Aktywny tryb ochrony' : 'Tryb domowy',
+                    !isConnected ? 'Offline' : (isArmed ? 'Aktywny tryb ochrony' : 'Tryb domowy'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium?.copyWith(
@@ -303,7 +473,7 @@ class _HeroCard extends StatelessWidget {
             minimumSize: Size.zero,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
-          onPressed: onToggle,
+          onPressed: isConnected ? onToggle : null,
           child: Text(
             isArmed ? 'Rozbrój' : 'Uzbrój',
             style: TextStyle(fontSize: Responsive.fontSize(isSmall ? 13 : 14)),

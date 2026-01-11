@@ -3,6 +3,83 @@ import 'package:phoneapp/screens/recordings_screen.dart';
 import 'package:phoneapp/screens/status_screen.dart';
 import 'package:phoneapp/screens/video_screen.dart';
 import 'package:phoneapp/utils/responsive.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:googleapis/drive/v3.dart' as drive;
+import 'package:http/http.dart' as http;
+
+// Prosty klient HTTP do autoryzacji Google (taki sam jak w recordings_screen.dart)
+class GoogleAuthClient extends http.BaseClient {
+  GoogleAuthClient(this._headers);
+  final Map<String, String> _headers;
+  final http.Client _client = http.Client();
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    request.headers.addAll(_headers);
+    return _client.send(request);
+  }
+}
+
+// Singleton do zarządzania autoryzacją Google w całej aplikacji
+class GoogleAuthService extends ChangeNotifier {
+  static final GoogleAuthService _instance = GoogleAuthService._internal();
+  factory GoogleAuthService() => _instance;
+  GoogleAuthService._internal();
+
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: [
+      drive.DriveApi.driveReadonlyScope,
+      drive.DriveApi.driveFileScope, // Potrzebne do zapisu pliku statusu
+    ],
+  );
+
+  GoogleSignInAccount? _currentUser;
+  drive.DriveApi? _driveApi;
+  bool _isConnected = false;
+
+  GoogleSignInAccount? get currentUser => _currentUser;
+  drive.DriveApi? get driveApi => _driveApi;
+  bool get isConnected => _isConnected;
+
+  Future<void> signInSilently() async {
+    try {
+      final account = await _googleSignIn.signInSilently();
+      if (account != null) {
+        await _handleSignInSuccess(account);
+      }
+    } catch (e) {
+      debugPrint('Silent sign-in error: $e');
+    }
+  }
+
+  Future<void> signIn() async {
+    try {
+      final account = await _googleSignIn.signIn();
+      if (account != null) {
+        await _handleSignInSuccess(account);
+      }
+    } catch (e) {
+      debugPrint('Sign-in error: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> signOut() async {
+    await _googleSignIn.signOut();
+    _currentUser = null;
+    _driveApi = null;
+    _isConnected = false;
+    notifyListeners();
+  }
+
+  Future<void> _handleSignInSuccess(GoogleSignInAccount account) async {
+    _currentUser = account;
+    final headers = await account.authHeaders;
+    _driveApi = drive.DriveApi(GoogleAuthClient(headers));
+    _isConnected = true;
+    notifyListeners();
+  }
+}
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -13,6 +90,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
+  final GoogleAuthService _authService = GoogleAuthService();
 
   final List<Widget> _screens = const [
     StatusScreen(),
@@ -25,6 +103,13 @@ class _MainScreenState extends State<MainScreen> {
     'Podgląd kamer',
     'Nagrania',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Próba cichego logowania przy starcie aplikacji
+    _authService.signInSilently();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +135,32 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ),
         toolbarHeight: Responsive.height(56),
+        actions: [
+          // Dodajemy ikonkę statusu połączenia z chmurą
+          AnimatedBuilder(
+            animation: _authService,
+            builder: (context, _) {
+              return IconButton(
+                icon: Icon(
+                  _authService.isConnected ? Icons.cloud_done : Icons.cloud_off,
+                  color: _authService.isConnected ? Colors.green : Colors.grey,
+                  size: Responsive.iconSize(24),
+                ),
+                onPressed: () {
+                  if (!_authService.isConnected) {
+                    _authService.signIn();
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Połączono z Google Drive')),
+                    );
+                  }
+                },
+                tooltip: _authService.isConnected ? 'Połączono z chmurą' : 'Połącz z chmurą',
+              );
+            },
+          ),
+          SizedBox(width: Responsive.padding(8)),
+        ],
       ),
       body: SafeArea(
         bottom: false,
