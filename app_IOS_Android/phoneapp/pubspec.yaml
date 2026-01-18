@@ -38,6 +38,8 @@ dependencies:
   shared_preferences: ^2.2.3
   google_fonts: ^6.2.1
   url_launcher: ^6.2.5
+  firebase_core: ^2.27.0
+  firebase_database: ^10.4.0
 
 dev_dependencies:
   flutter_test:

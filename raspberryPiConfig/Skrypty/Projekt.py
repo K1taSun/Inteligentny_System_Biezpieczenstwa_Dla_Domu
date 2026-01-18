@@ -10,13 +10,11 @@ import io
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
-from google.oauth2 import service_account
+import firebase_admin
+from firebase_admin import credentials, db
 
 # Globalne blokady dla zasobów
 camera_lock = threading.Lock()
-state_upload_lock = threading.Lock()
 
 
 # KONFIGURACJA I IMPORTY
@@ -31,14 +29,12 @@ try:
 		SMTP_PASS,                # Hasło aplikacji Google
 		ALERT_SUBJECT,            # Temat maila alarmowego
 		ALERT_MESSAGE,            # Treść maila alarmowego
-		GDRIVE_CLIENT_SECRET_FILE,# Ścieżka do pliku klucza json
-		GDRIVE_FOLDER_ID,         # ID folderu na Google Drive
-		GDRIVE_UPLOAD_TRACK_FILE, # Plik pamiętający co już wysłano
+		FIREBASE_CREDENTIALS_FILE # Ścieżka do klucza Firebase
 	)
 except ImportError as exc:
 	raise RuntimeError(
 		"BRAK PLIKU secure_config.py!\n"
-		"Skopiuj plik 'secure_config_template.py', nazwij go 'secure_config.py' i wpisz tam swoje hasła."
+		"Upewnij się, że masz zdefiniowane FIREBASE_CREDENTIALS_FILE w secure_config.py"
 	) from exc
 
 
@@ -64,24 +60,15 @@ while ser is None:
         print(f"Czekam na podłączenie Arduino do {SERIAL_PORT}... ({e})")
         time.sleep(5) # Spróbuj ponownie za 5 sekund
 
-# To zmienna dla Google Drive, żeby nie logować się co chwilę
-drive_service = None
-
-def get_drive_service():
-	"""Loguje się do Google Drive tylko raz i trzyma połączenie."""
-	global drive_service
-	if drive_service:
-		return drive_service
-	try:
-		# Uprawnienia tylko do odczytu i zapisu plików (bez kasowania wszystkiego)
-		SCOPES = ['https://www.googleapis.com/auth/drive']
-		creds = service_account.Credentials.from_service_account_file(
-			GDRIVE_CLIENT_SECRET_FILE, scopes=SCOPES)
-		drive_service = build('drive', 'v3', credentials=creds)
-		return drive_service
-	except Exception as e:
-		print(f"Nie udało się zalogować do Google Drive: {e}")
-		return None
+# Inicjalizacja Firebase
+try:
+	cred = credentials.Certificate(FIREBASE_CREDENTIALS_FILE)
+	firebase_admin.initialize_app(cred, {
+		'databaseURL': 'https://TWOJ-PROJEKT.firebaseio.com/' # ZMIEŃ TO NA SWÓJ URL
+	})
+	print("Połączono z Firebase!")
+except Exception as e:
+	print(f"Błąd inicjalizacji Firebase: {e}")
 
 # FUNKCJE POMOCNICZE
 
@@ -244,131 +231,41 @@ def procedura_alarmowa():
 
 
 REMOTE_FILE_NAME = "remote_status.json"
-REMOTE_FILE_NAME = "remote_status.json"
-last_known_remote_state = None
-last_known_temp = 0.0
-last_known_humidity = 0.0
-
-def update_remote_status(is_armed):
-	"""Wysyła aktualny stan systemu do pliku na Google Drive."""
-	global drive_service, last_known_temp, last_known_humidity
+# Listener Firebase (zastępuje polling)
+def on_firebase_change(event):
+	"""Wywoływane automatycznie, gdy zmienią się dane w bazie."""
+	global last_known_remote_state
 	
-	# Zabezpieczenie przed jednoczesnym wysyłaniem
-	with state_upload_lock:
-		try:
-			service = get_drive_service()
-			if not service:
-				return
-
-			status_data = {
-				'armed': is_armed,
-				'temp': last_known_temp,
-				'humidity': last_known_humidity,
-				'timestamp': datetime.now().isoformat(),
-				'updated_by': 'RaspberryPi'
-			}
-			
-			content = json.dumps(status_data)
-			media = MediaFileUpload(io.BytesIO(content.encode('utf-8')), mimetype='application/json', resumable=True)
-			
-			# Najpierw szukamy pliku, żeby go nadpisać
-			results = service.files().list(
-				q=f"name='{REMOTE_FILE_NAME}' and trashed=false",
-				spaces='drive',
-				fields='files(id)'
-			).execute()
-			
-			files = results.get('files', [])
-			
-			if files:
-				file_id = files[0]['id']
-				service.files().update(
-					fileId=file_id,
-					media_body=media
-				).execute()
-				print(f"☁️ Zaktualizowano status w chmurze: {'UZBROJONY' if is_armed else 'ROZBROJONY'}")
-			else:
-				file_metadata = {'name': REMOTE_FILE_NAME, 'parents': [GDRIVE_FOLDER_ID]}
-				service.files().create(
-					body=file_metadata,
-					media_body=media,
-					fields='id'
-				).execute()
-				print(f"☁️ Utworzono nowy plik statusu: {'UZBROJONY' if is_armed else 'ROZBROJONY'}")
-				
-		except Exception as e:
-			print(f"Błąd aktualizacji statusu w chmurze: {e}")
-
-def check_remote_commands():
-	"""
-	Sprawdza plik sterujący na Google Drive.
-	Jeśli w aplikacji kliknąłeś "Uzbrój", plik zmieni się na {"armed": true}.
-	My to odczytujemy i wysyłamy do Arduino.
-	"""
-	global last_known_remote_state, ser
+	if event.data is None: return
 	
 	try:
-		service = get_drive_service()
-		if not service:
-			return
-
-		# Szukamy pliku remote_status.json na dysku
-		results = service.files().list(
-			q=f"name='{REMOTE_FILE_NAME}' and trashed=false",
-			spaces='drive',
-			fields='files(id, name, modifiedTime)'
-		).execute()
+		# Jeśli zmieniono bezpośrednio 'armed' lub cały obiekt 'system_status'
+		data = event.data
+		is_armed = False
 		
-		files = results.get('files', [])
-		
-		if not files:
-			# Brak pliku sterującego - nic nie rób
-			return
-
-		# Pobieramy ten plik do pamięci RAM (bez zapisywania na dysk)
-		file_id = files[0]['id']
-		request = service.files().get_media(fileId=file_id)
-		fh = io.BytesIO()
-		downloader = MediaIoBaseDownload(fh, request)
-		
-		done = False
-		while done is False:
-			status, done = downloader.next_chunk()
-
-		# Czytamy co jest w środku (JSON)
-		try:
-			content = fh.getvalue().decode('utf-8')
-			data = json.loads(content)
+		# Logika zależy od tego czy dostaniemy słownik czy wartość
+		if isinstance(data, dict) and 'armed' in data:
+			is_armed = data['armed']
+		elif isinstance(data, bool): # Jeśli nasłuchujemy bezpośrednio pola armed (zależnie od path)
+			is_armed = data
 			
-			if 'armed' in data:
-				remote_armed = data['armed']
-				
-				# Jeśli stan na Dysku jest inny niż ten, który pamiętamy
-				if last_known_remote_state != remote_armed:
-					print(f" Aplikacja zmieniła status na: {'UZBROJONY' if remote_armed else 'ROZBROJONY'}")
-					
-					command = "ACTIVATE" if remote_armed else "DEACTIVATE"
-					
-					if ser and ser.is_open:
-						ser.write((command + "\n").encode('utf-8'))
-						print(f"Wysyłam komendę do Arduino: {command}")
-						last_known_remote_state = remote_armed
-					else:
-						print("Chciałem zmienić stan, ale Arduino jest odłączone!")
-						
-		except json.JSONDecodeError:
-			print("Plik sterujący jest uszkodzony (zły JSON)")
+		# Wysyłamy do Arduino tylko jeśli stan się zmienił
+		if last_known_remote_state != is_armed:
+			print(f"🔥 Firebase: Zmiana stanu na {'UZBROJONY' if is_armed else 'ROZBROJONY'}")
+			command = "ACTIVATE" if is_armed else "DEACTIVATE"
+			if ser and ser.is_open:
+				ser.write((command + "\n").encode('utf-8'))
+			last_known_remote_state = is_armed
 
 	except Exception as e:
-		# Błędy sieciowe są normalne, nie panikuj
-		print(f" Nie udało się sprawdzić komend (brak neta?): {e}")
+		print(f"Błąd przetwarzania z Firebase: {e}")
 
-def watek_zdalnego_sterowania():
-	"""Uruchamia pętlę sprawdzania komend w tle."""
-	print(" Uruchamiam nasłuch zdalnego sterowania (co 5 sekund)...")
-	while True:
-		check_remote_commands()
-		time.sleep(5) # Sprawdzaj co 5 sekund
+# Podpinamy listener
+try:
+	ref = db.reference('system_status')
+	ref.listen(on_firebase_change)
+except Exception as e:
+	print(f"Nie udało się podpiąć listenera: {e}")
 
 # PĘTLA GŁÓWNA
 
@@ -402,18 +299,22 @@ try:
 						if 'status' in arduino_data:
 							if arduino_data['status'] == 'activated':
 								if last_known_remote_state is not True:
-									threading.Thread(target=update_remote_status, args=(True,), daemon=True).start()
+									db.reference('system_status').update({'armed': True})
 									last_known_remote_state = True
 							elif arduino_data['status'] == 'deactivated':
 								if last_known_remote_state is not False:
-									threading.Thread(target=update_remote_status, args=(False,), daemon=True).start()
+									db.reference('system_status').update({'armed': False})
 									last_known_remote_state = False
 
 						# Cache temperature/humidity if present
-						if 'temp' in arduino_data:
-							last_known_temp = arduino_data['temp']
-						if 'humidity' in arduino_data:
-							last_known_humidity = arduino_data['humidity']
+						updates = {}
+						if 'temp' in arduino_data: 
+							updates['temp'] = arduino_data['temp']
+						if 'humidity' in arduino_data: 
+							updates['humidity'] = arduino_data['humidity']
+						
+						if updates:
+							db.reference('system_status').update(updates)
 
 					except json.JSONDecodeError:
 						# To nie był JSON, ignorujemy (ale logujemy wyżej)

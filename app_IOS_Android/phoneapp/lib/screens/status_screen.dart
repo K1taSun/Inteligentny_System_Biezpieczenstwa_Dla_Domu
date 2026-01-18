@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:phoneapp/screens/main_shell.dart';
 import 'package:phoneapp/theme/app_theme.dart';
 import 'package:phoneapp/utils/responsive.dart';
-import 'package:googleapis/drive/v3.dart' as drive;
-import 'dart:convert';
+import 'package:firebase_database/firebase_database.dart';
 import 'dart:async';
 
 class StatusScreen extends StatefulWidget {
@@ -38,138 +37,65 @@ class _StatusScreenState extends State<StatusScreen> {
     ),
   ];
 
+  final DatabaseReference _database = FirebaseDatabase.instance.ref();
+  late StreamSubscription<DatabaseEvent> _statusSubscription;
+
   @override
   void initState() {
     super.initState();
-    // Nasłuchuj zmian autoryzacji
-    _authService.addListener(_onAuthChanged);
-    // Jeśli już połączony, sprawdź status
-    if (_authService.isConnected) {
-      _fetchRemoteStatus();
-    }
+    _activateListeners();
   }
 
-  @override
-  void dispose() {
-    _authService.removeListener(_onAuthChanged);
-    super.dispose();
-  }
-
-  void _onAuthChanged() {
-    if (mounted) {
-      if (_authService.isConnected) {
-        _fetchRemoteStatus();
-      } else {
-        setState(() => _isArmed = false);
-      }
-    }
-  }
-
-  Future<void> _fetchRemoteStatus() async {
-    if (!_authService.isConnected || _authService.driveApi == null) return;
-
+  void _activateListeners() {
     setState(() => _isLoading = true);
-
-    try {
-      final driveApi = _authService.driveApi!;
-      
-      // Szukaj pliku
-      final fileList = await driveApi.files.list(
-        q: "name = '$_remoteFileName' and trashed = false",
-        spaces: 'drive',
-        $fields: 'files(id, name)',
-      );
-
-      if (fileList.files != null && fileList.files!.isNotEmpty) {
-        final fileId = fileList.files!.first.id!;
-        
-        // Pobierz zawartość
-        final media = await driveApi.files.get(
-          fileId,
-          downloadOptions: drive.DownloadOptions.fullMedia,
-        ) as drive.Media;
-
-        final stream = media.stream;
-        final content = await utf8.decodeStream(stream);
-        final data = jsonDecode(content);
-
-        if (mounted && data['armed'] != null) {
+    
+    _statusSubscription = _database.child('system_status').onValue.listen((event) {
+      if (event.snapshot.value != null) {
+        final data = Map<dynamic, dynamic>.from(event.snapshot.value as Map);
+        if (mounted) {
           setState(() {
-            _isArmed = data['armed'];
-            if (data['temp'] != null) _temperature = (data['temp'] as num).toDouble();
-            if (data['humidity'] != null) _humidity = (data['humidity'] as num).toDouble();
+            _isArmed = data['armed'] ?? false;
+            _temperature = (data['temp'] as num?)?.toDouble() ?? 0.0;
+            _humidity = (data['humidity'] as num?)?.toDouble() ?? 0.0;
             _isLoading = false;
           });
         }
       } else {
-        // Plik nie istnieje - domyślnie rozbrojony
-        if (mounted) setState(() => _isLoading = false);
+        setState(() => _isLoading = false);
       }
-    } catch (e) {
-      debugPrint('Error fetching status: $e');
+    }, onError: (error) {
+      debugPrint('Firebase error: $error');
       if (mounted) setState(() => _isLoading = false);
-    }
+    });
+  }
+
+  @override
+  void dispose() {
+    _statusSubscription.cancel();
+    super.dispose();
   }
 
   Future<void> _toggleAlarm() async {
-    if (!_authService.isConnected) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Zaloguj się do chmury (ikona w rogu), aby sterować alarmem.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
     final newState = !_isArmed;
     
     // Optymistyczna aktualizacja UI
     setState(() {
       _isArmed = newState;
-      _isLoading = true;
     });
 
     try {
-      final driveApi = _authService.driveApi!;
-      
-      // Przygotuj JSON
-      final content = jsonEncode({'armed': newState, 'timestamp': DateTime.now().toIso8601String()});
-      final media = drive.Media(
-        Stream.value(utf8.encode(content)),
-        utf8.encode(content).length,
-      );
-
-      // Sprawdź czy plik istnieje
-      final fileList = await driveApi.files.list(
-        q: "name = '$_remoteFileName' and trashed = false",
-        spaces: 'drive',
-        $fields: 'files(id)',
-      );
-
-      if (fileList.files != null && fileList.files!.isNotEmpty) {
-        // Aktualizuj istniejący
-        final fileId = fileList.files!.first.id!;
-        await driveApi.files.update(
-          drive.File(),
-          fileId,
-          uploadMedia: media,
-        );
-      } else {
-        // Utwórz nowy
-        await driveApi.files.create(
-          drive.File(name: _remoteFileName, parents: []), // Root folder
-          uploadMedia: media,
-        );
-      }
+      await _database.child('system_status').update({
+        'armed': newState,
+        'timestamp': DateTime.now().toIso8601String(),
+        'updated_by': 'FlutterApp'
+      });
 
       if (mounted) {
-        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(newState ? 'Wysłano komendę UZBROJENIA' : 'Wysłano komendę ROZBROJENIA'),
             backgroundColor: newState ? AppColors.accent : Colors.grey,
-            duration: const Duration(seconds: 2),
+            duration: const Duration(seconds: 1),
           ),
         );
       }
@@ -177,12 +103,9 @@ class _StatusScreenState extends State<StatusScreen> {
       debugPrint('Error toggling alarm: $e');
       // Cofnij zmianę w razie błędu
       if (mounted) {
-        setState(() {
-          _isArmed = !newState;
-          _isLoading = false;
-        });
+        setState(() => _isArmed = !newState);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Błąd komunikacji z chmurą!'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('Błąd komunikacji z Firebase!'), backgroundColor: Colors.red),
         );
       }
     }
