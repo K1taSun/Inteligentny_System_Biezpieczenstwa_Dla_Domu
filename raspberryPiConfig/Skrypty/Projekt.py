@@ -14,6 +14,10 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 from google.oauth2 import service_account
 
+# Globalne blokady dla zasobów
+camera_lock = threading.Lock()
+state_upload_lock = threading.Lock()
+
 
 # KONFIGURACJA I IMPORTY
 
@@ -88,6 +92,16 @@ def nagraj_wideo():
 	2. Konwertuje je do formatu .mp4 (żeby działało na telefonie)
 	3. Usuwa surowy plik, żeby nie śmiecić
 	"""
+	"""
+	1. Nagrywa surowe wideo z kamery (.h264)
+	2. Konwertuje je do formatu .mp4 (żeby działało na telefonie)
+	3. Usuwa surowy plik, żeby nie śmiecić
+	"""
+	# Sprawdzamy, czy kamera nie jest już zajęta
+	if not camera_lock.acquire(blocking=False):
+		print("⚠️ Kamera jest zajęta! Pomijam nagrywanie.")
+		return None
+		
 	try:
 		timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 		plik_h264 = os.path.join(RECORDINGS_FOLDER, f"alarm_{timestamp}.h264")
@@ -124,6 +138,9 @@ def nagraj_wideo():
 	except Exception as e:
 		print(f"Błąd kamery (czy jest podłączona?): {e}")
 		return None
+	finally:
+		# Zwalniamy blokadę, żeby inny wątek mógł użyć kamery
+		camera_lock.release()
 
 def mail_alarmowy():
 	"""Wysyła szybkiego maila z ostrzeżeniem."""
@@ -227,7 +244,60 @@ def procedura_alarmowa():
 
 
 REMOTE_FILE_NAME = "remote_status.json"
+REMOTE_FILE_NAME = "remote_status.json"
 last_known_remote_state = None
+last_known_temp = 0.0
+last_known_humidity = 0.0
+
+def update_remote_status(is_armed):
+	"""Wysyła aktualny stan systemu do pliku na Google Drive."""
+	global drive_service, last_known_temp, last_known_humidity
+	
+	# Zabezpieczenie przed jednoczesnym wysyłaniem
+	with state_upload_lock:
+		try:
+			service = get_drive_service()
+			if not service:
+				return
+
+			status_data = {
+				'armed': is_armed,
+				'temp': last_known_temp,
+				'humidity': last_known_humidity,
+				'timestamp': datetime.now().isoformat(),
+				'updated_by': 'RaspberryPi'
+			}
+			
+			content = json.dumps(status_data)
+			media = MediaFileUpload(io.BytesIO(content.encode('utf-8')), mimetype='application/json', resumable=True)
+			
+			# Najpierw szukamy pliku, żeby go nadpisać
+			results = service.files().list(
+				q=f"name='{REMOTE_FILE_NAME}' and trashed=false",
+				spaces='drive',
+				fields='files(id)'
+			).execute()
+			
+			files = results.get('files', [])
+			
+			if files:
+				file_id = files[0]['id']
+				service.files().update(
+					fileId=file_id,
+					media_body=media
+				).execute()
+				print(f"☁️ Zaktualizowano status w chmurze: {'UZBROJONY' if is_armed else 'ROZBROJONY'}")
+			else:
+				file_metadata = {'name': REMOTE_FILE_NAME, 'parents': [GDRIVE_FOLDER_ID]}
+				service.files().create(
+					body=file_metadata,
+					media_body=media,
+					fields='id'
+				).execute()
+				print(f"☁️ Utworzono nowy plik statusu: {'UZBROJONY' if is_armed else 'ROZBROJONY'}")
+				
+		except Exception as e:
+			print(f"Błąd aktualizacji statusu w chmurze: {e}")
 
 def check_remote_commands():
 	"""
@@ -323,6 +393,31 @@ try:
 				
 				if line:
 					print(f"[Arduino]: {line}")
+					
+					# Próbujemy sparsować JSON z Arduino
+					try:
+						arduino_data = json.loads(line)
+						
+						# Synchronizacja stanu: Arduino -> Chmura
+						if 'status' in arduino_data:
+							if arduino_data['status'] == 'activated':
+								if last_known_remote_state is not True:
+									threading.Thread(target=update_remote_status, args=(True,), daemon=True).start()
+									last_known_remote_state = True
+							elif arduino_data['status'] == 'deactivated':
+								if last_known_remote_state is not False:
+									threading.Thread(target=update_remote_status, args=(False,), daemon=True).start()
+									last_known_remote_state = False
+
+						# Cache temperature/humidity if present
+						if 'temp' in arduino_data:
+							last_known_temp = arduino_data['temp']
+						if 'humidity' in arduino_data:
+							last_known_humidity = arduino_data['humidity']
+
+					except json.JSONDecodeError:
+						# To nie był JSON, ignorujemy (ale logujemy wyżej)
+						pass
 
 				# === LOGIKA ALARMU ===
 				# Jeśli Arduino krzyczy, że jest alarm

@@ -1,20 +1,19 @@
 #include <SimpleDHT.h>
 
-const int pirPin = 2;       // Czujnik ruchu
-const int buzzerPin = 4;    // Głośnik/Buzzer
-const int buttonPin = 5;    // Przycisk sterowania
-const int ledPin = 6;       // Dioda LED
-const int dhtPin = 7;       // Czujnik temperatury i wilgotności
+const int pirPin = 2;    // Czujnik ruchu
+const int buzzerPin = 4; // Głośnik/Buzzer
+const int buttonPin = 5; // Przycisk sterowania
+const int ledPin = 6;    // Dioda LED
+const int dhtPin = 7;    // Czujnik temperatury i wilgotności
 
-//inicjalizacja czujnika temperatury
+// inicjalizacja czujnika temperatury
 SimpleDHT11 dht(dhtPin);
 
-
 // główne flagi określające co się dzieje w systemie
-bool systemAktywny = false;   
-bool alarmAktywny = false;    
-unsigned long czasStartu = 0; 
-const unsigned long opoznienieStartu = 10000; 
+bool systemAktywny = false;
+bool alarmAktywny = false;
+unsigned long czasStartu = 0;
+const unsigned long opoznienieStartu = 10000;
 
 // zmienne do obsługi migania diodą LED
 unsigned long ostatniMig = 0;
@@ -35,7 +34,6 @@ bool poprzedniStanPIR = false;
 unsigned long czasOstatniejZmianyPIR = 0;
 const unsigned long debouncePIR = 100;
 
-
 // zmienne do odtwarzania dźwięków bez zatrzymywania programu
 bool buzzerAktywny = false;
 unsigned long czasBuzzerStart = 0;
@@ -51,7 +49,7 @@ const unsigned long czasMelodiaOFF = 100;
 float temperatura = 0.0;
 float wilgotnosc = 0.0;
 unsigned long ostatniOdczytDHT = 0;
-const unsigned long interwalOdczytuDHT = 2000; 
+const unsigned long interwalOdczytuDHT = 2000;
 unsigned long ostatnieWyslanieDanych = 0;
 const unsigned long interwalWysylania = 30000;
 bool dhtGotowy = false;
@@ -72,9 +70,9 @@ void setup() {
 
   // stan początkowy wyjść
   digitalWrite(buzzerPin, HIGH);
-  analogWrite(ledPin, 0);        
-  
-  //komunikacja
+  analogWrite(ledPin, 0);
+
+  // komunikacja
   Serial.begin(9600);
 
   // inicjalizacja liczników czasu i stanów
@@ -83,10 +81,10 @@ void setup() {
   poprzedniStanPIR = (digitalRead(pirPin) == HIGH);
 }
 
-//Główna pętla logiki systemu
+// Główna pętla logiki systemu
 void loop() {
   unsigned long teraz = millis(); // Aktualny czas systemu
-  
+
   // 1. Sprawdź czy ktoś nacisnął przycisk (z eliminacją zakłóceń)
   bool aktualnyStanPrzycisku = digitalRead(buttonPin);
   if (aktualnyStanPrzycisku == LOW && ostatniStanPrzycisku == HIGH) {
@@ -135,15 +133,16 @@ void loop() {
         ostatniaZmianaMigniecia = teraz;
         stanMigania = !stanMigania;
         analogWrite(ledPin, stanMigania ? 255 : 0);
-        
+
         if (!stanMigania) {
           licznikMigniec++;
           if (licznikMigniec >= 2) {
-            
+
             miganiePoUzbrojeniu = false;
             analogWrite(ledPin, 0);
-            Serial.println("System uzbrojony");
-         
+            Serial.println(
+                "{\"status\":\"armed\",\"message\":\"System uzbrojony\"}");
+
             poprzedniStanPIR = (digitalRead(pirPin) == HIGH);
           }
         }
@@ -154,12 +153,12 @@ void loop() {
       unsigned long czasOdStartu = teraz - czasStartu;
       int jasnosc = map(czasOdStartu, 0, opoznienieStartu, 0, 255);
       analogWrite(ledPin, jasnosc);
-
     }
   }
 
   // 8. MONITOROWANIE BEZPIECZEŃSTWA
-  if (systemAktywny && (teraz - czasStartu > opoznienieStartu) && !miganiePoUzbrojeniu) {
+  if (systemAktywny && (teraz - czasStartu > opoznienieStartu) &&
+      !miganiePoUzbrojeniu) {
 
     // sprawdzanie czujnika ruchu
     bool wykrytoRuch = odczytajPIR(teraz);
@@ -170,19 +169,17 @@ void loop() {
         alarmAktywny = true;
       }
 
-      
       if (teraz - ostatniMig >= 100) {
         stanMigania = !stanMigania;
         analogWrite(ledPin, stanMigania ? 255 : 0);
         ostatniMig = teraz;
       }
-      
-     
+
       if (trybBuzzer != 2) {
         uruchomMelodie();
       }
     } else {
-      
+
       if (alarmAktywny) {
         Serial.println("SYSTEM: Alarm WYŁĄCZONY.");
         analogWrite(ledPin, 0);
@@ -198,7 +195,7 @@ void loop() {
 // Odczytuje czujnik ruchu, ignorując zakłócenia
 bool odczytajPIR(unsigned long teraz) {
   bool aktualnyStan = (digitalRead(pirPin) == HIGH);
-  
+
   if (aktualnyStan != poprzedniStanPIR) {
     if (teraz - czasOstatniejZmianyPIR > debouncePIR) {
       czasOstatniejZmianyPIR = teraz;
@@ -209,9 +206,10 @@ bool odczytajPIR(unsigned long teraz) {
   return poprzedniStanPIR;
 }
 
-//obsługa dźwięku
+// obsługa dźwięku
 void aktualizujBuzzer(unsigned long teraz) {
-  if (trybBuzzer == 0) return;
+  if (trybBuzzer == 0)
+    return;
 
   if (trybBuzzer == 1) {
     if (buzzerAktywny) {
@@ -250,7 +248,7 @@ void aktualizujBuzzer(unsigned long teraz) {
   }
 }
 
-//obsługa dźwięku
+// obsługa dźwięku
 void uruchomBeep(int ilosc) {
   if (ilosc > 0) {
     trybBuzzer = 1;
@@ -261,7 +259,7 @@ void uruchomBeep(int ilosc) {
   }
 }
 
-//obsługa melodii
+// obsługa melodii
 void uruchomMelodie() {
   trybBuzzer = 2;
   buzzerAktywny = true;
@@ -269,7 +267,7 @@ void uruchomMelodie() {
   digitalWrite(buzzerPin, LOW);
 }
 
-//wyłączanie dźwięku
+// wyłączanie dźwięku
 void wylaczBuzzer() {
   trybBuzzer = 0;
   buzzerAktywny = false;
@@ -277,7 +275,7 @@ void wylaczBuzzer() {
   digitalWrite(buzzerPin, HIGH);
 }
 
-//aktualizacja dht
+// aktualizacja dht
 void aktualizujDHT(unsigned long teraz) {
   if (teraz - ostatniOdczytDHT >= interwalOdczytuDHT) {
     ostatniOdczytDHT = teraz;
@@ -295,7 +293,7 @@ void aktualizujDHT(unsigned long teraz) {
   }
 }
 
-//wysyłanie danych dht
+// wysyłanie danych dht
 void wyslijDaneDHT() {
   if (dhtGotowy) {
     Serial.print("{\"temp\":");
@@ -308,11 +306,12 @@ void wyslijDaneDHT() {
   }
 }
 
-//odczytywanie komend zdalnych
+// odczytywanie komend zdalnych
 void odczytajKomende() {
-  while (Serial.available() > 0 && odebranaKomenda.length() < maxDlugoscKomendy) {
+  while (Serial.available() > 0 &&
+         odebranaKomenda.length() < maxDlugoscKomendy) {
     char znak = Serial.read();
-    
+
     if (znak == '\n' || znak == '\r') {
       if (odebranaKomenda.length() > 0) {
         odebranaKomenda.trim();
@@ -323,24 +322,26 @@ void odczytajKomende() {
       odebranaKomenda += znak;
     }
   }
-  
+
   if (odebranaKomenda.length() >= maxDlugoscKomendy) {
     odebranaKomenda = "";
   }
 }
 
-//obsługa komend zdalnych
+// obsługa komend zdalnych
 void obsluzKomende(unsigned long teraz) {
   odebranaKomenda.trim();
-  
+
   if (odebranaKomenda.startsWith("{") && odebranaKomenda.endsWith("}")) {
     if (odebranaKomenda.indexOf("\"command\"") >= 0) {
       if (odebranaKomenda.indexOf("\"activate\"") >= 0) {
         aktywujSystem(teraz, true);
-        Serial.println("{\"status\":\"activated\",\"message\":\"System aktywowany zdalnie\"}");
+        Serial.println("{\"status\":\"activated\",\"message\":\"System "
+                       "aktywowany zdalnie\"}");
       } else if (odebranaKomenda.indexOf("\"deactivate\"") >= 0) {
         aktywujSystem(teraz, false);
-        Serial.println("{\"status\":\"deactivated\",\"message\":\"System dezaktywowany zdalnie\"}");
+        Serial.println("{\"status\":\"deactivated\",\"message\":\"System "
+                       "dezaktywowany zdalnie\"}");
       } else if (odebranaKomenda.indexOf("\"status\"") >= 0) {
         wyslijStatus();
       } else {
@@ -349,14 +350,16 @@ void obsluzKomende(unsigned long teraz) {
       return;
     }
   }
-  
+
   odebranaKomenda.toUpperCase();
   if (odebranaKomenda == "ACTIVATE" || odebranaKomenda == "ON") {
     aktywujSystem(teraz, true);
-    Serial.println("{\"status\":\"activated\",\"message\":\"System aktywowany zdalnie\"}");
+    Serial.println(
+        "{\"status\":\"activated\",\"message\":\"System aktywowany zdalnie\"}");
   } else if (odebranaKomenda == "DEACTIVATE" || odebranaKomenda == "OFF") {
     aktywujSystem(teraz, false);
-    Serial.println("{\"status\":\"deactivated\",\"message\":\"System dezaktywowany zdalnie\"}");
+    Serial.println("{\"status\":\"deactivated\",\"message\":\"System "
+                   "dezaktywowany zdalnie\"}");
   } else if (odebranaKomenda == "STATUS") {
     wyslijStatus();
   } else {
@@ -364,15 +367,16 @@ void obsluzKomende(unsigned long teraz) {
   }
 }
 
-//aktywacja systemu
+// aktywacja systemu
 void aktywujSystem(unsigned long teraz, bool aktywuj) {
   systemAktywny = aktywuj;
-  
+
   if (systemAktywny) {
     czasStartu = teraz;
     analogWrite(ledPin, 0);
     uruchomBeep(1);
-    Serial.println("System aktywowany, uzbrojenie za 10 s.");
+    Serial.println("{\"status\":\"activated\",\"message\":\"System aktywowany, "
+                   "uzbrojenie za 10s\"}");
     miganiePoUzbrojeniu = true;
     czasMigania = teraz;
     licznikMigniec = 0;
@@ -383,18 +387,21 @@ void aktywujSystem(unsigned long teraz, bool aktywuj) {
     analogWrite(ledPin, 0);
     wylaczBuzzer();
     uruchomBeep(2);
-    Serial.println("System dezaktywowany.");
+    Serial.println(
+        "{\"status\":\"deactivated\",\"message\":\"System dezaktywowany\"}");
   }
 }
 
-//wysyłanie statusu systemu JSON
+// wysyłanie statusu systemu JSON
 void wyslijStatus() {
   Serial.print("{\"system_active\":");
   Serial.print(systemAktywny ? "true" : "false");
   Serial.print(",\"alarm_active\":");
   Serial.print(alarmAktywny ? "true" : "false");
   Serial.print(",\"armed\":");
-  bool uzbrojony = systemAktywny && (millis() - czasStartu > opoznienieStartu) && !miganiePoUzbrojeniu;
+  bool uzbrojony = systemAktywny &&
+                   (millis() - czasStartu > opoznienieStartu) &&
+                   !miganiePoUzbrojeniu;
   Serial.print(uzbrojony ? "true" : "false");
   Serial.print(",\"temp\":");
   Serial.print(temperatura, 1);

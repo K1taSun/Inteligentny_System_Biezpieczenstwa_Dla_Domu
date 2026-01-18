@@ -16,8 +16,8 @@ class StatusScreen extends StatefulWidget {
 class _StatusScreenState extends State<StatusScreen> {
   bool _isArmed = false;
   bool _isLoading = false;
-  final double _temperature = 21.4;
-  final double _humidity = 47;
+  double _temperature = 0.0;
+  double _humidity = 0.0;
   final GoogleAuthService _authService = GoogleAuthService();
   
   // Nazwa pliku do sterowania
@@ -96,6 +96,8 @@ class _StatusScreenState extends State<StatusScreen> {
         if (mounted && data['armed'] != null) {
           setState(() {
             _isArmed = data['armed'];
+            if (data['temp'] != null) _temperature = (data['temp'] as num).toDouble();
+            if (data['humidity'] != null) _humidity = (data['humidity'] as num).toDouble();
             _isLoading = false;
           });
         }
